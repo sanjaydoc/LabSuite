@@ -14,9 +14,9 @@
   --rule: #111114;     /* the signature strong dark full-width rule */
 
   --accent: #0d0d0f;   /* actions are black, like Merge */
-  --ok: #157050;       /* muted green (ALLOW) */
+  --ok: #12a150;       /* bright green (ALLOW) */
   --ok-bg: #e8f2ec;
-  --no: #a5342f;       /* muted red (DENY) */
+  --no: #e0332d;       /* bright red (DENY) */
   --no-bg: #f6ebe9;
 
   /* small layer-accent dots for wayfinding (kept subtle) */
@@ -128,8 +128,10 @@ p { margin: 0 0 1rem; color: var(--ink-2); }
   padding: .18rem .55rem; border-radius: var(--pill);
   border: 1px solid var(--hair); color: var(--ink-2); background: var(--paper-2);
 }
-.chip.allow { color: var(--ok); background: var(--ok-bg); border-color: #cfe6da; }
-.chip.deny { color: var(--no); background: var(--no-bg); border-color: #ecd4d1; }
+/* Status chips: outline pills in the same language as the action buttons —
+   bright colored border + text on a transparent ground (no filled blob). */
+.chip.allow { color: var(--ok); background: transparent; border: 1.5px solid var(--ok); }
+.chip.deny { color: var(--no); background: transparent; border: 1.5px solid var(--no); }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .dot.okta { background: var(--okta); }
 .dot.ad { background: var(--ad); }

@@ -1,0 +1,350 @@
+"""``labsuite`` -- the command-line control plane.
+
+Run ``labsuite demo`` for a scripted end-to-end story, or drive individual
+operations (``onboard``, ``offboard``, ``access``, ``check``, ``review``,
+``sync``, ``audit``). Pass ``--state PATH`` to any mutating command to persist
+the control plane between invocations (otherwise each run starts from the seeded
+lab in memory).
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+from labsuite.crypto import TokenError
+from labsuite.engine import ControlPlane
+from labsuite.models import Department
+from labsuite.seed import DEMO_PASSWORD, build_lab
+
+# --------------------------------------------------------------------------- #
+# Small presentation helpers (stdlib only -- no rich/tabulate dependency)
+# --------------------------------------------------------------------------- #
+BOLD, DIM, GREEN, RED, CYAN, RESET = "\033[1m", "\033[2m", "\033[32m", "\033[31m", "\033[36m", "\033[0m"
+
+
+def _c(text: str, color: str) -> str:
+    return f"{color}{text}{RESET}" if sys.stdout.isatty() else text
+
+
+def _header(text: str) -> None:
+    print(f"\n{_c(text, BOLD)}")
+    print(_c("-" * len(text), DIM))
+
+
+def _yes_no(value: bool) -> str:
+    return _c("ALLOW", GREEN) if value else _c("DENY", RED)
+
+
+def _parse_department(raw: str) -> Department:
+    for dept in Department:
+        if dept.value.lower() == raw.lower() or dept.name.lower() == raw.lower():
+            return dept
+    valid = ", ".join(d.value for d in Department)
+    raise SystemExit(f"unknown department {raw!r}; valid: {valid}")
+
+
+# --------------------------------------------------------------------------- #
+# State management
+# --------------------------------------------------------------------------- #
+def _load_or_build(state: str | None) -> ControlPlane:
+    if state and Path(state).exists():
+        return ControlPlane.from_dict(json.loads(Path(state).read_text()))
+    return build_lab()
+
+
+def _save(cp: ControlPlane, state: str | None) -> None:
+    if state:
+        Path(state).write_text(json.dumps(cp.to_dict(), indent=2))
+
+
+# --------------------------------------------------------------------------- #
+# Commands
+# --------------------------------------------------------------------------- #
+def cmd_org(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    _header("Okta users")
+    for user in sorted(cp.okta.list_users(), key=lambda u: u.username):
+        status = "active" if user.active else _c("DISABLED", RED)
+        print(f"  {user.username:10} {user.display_name:16} {user.department.value:11} {status}")
+    _header("Okta groups")
+    for group in sorted(cp.okta.list_groups(), key=lambda g: g.name):
+        print(f"  {group.name:22} {DIM}{len(group.members)} members{RESET}")
+    _header("TrueNAS shares")
+    for share in cp.truenas.list_shares():
+        tag = _c(" [sensitive]", RED) if share.sensitive else ""
+        acl = ", ".join(f"{g}:{lvl}" for g, lvl in share.acl.items())
+        print(f"  {share.name:18} {DIM}{share.dataset}{RESET}{tag}\n      {DIM}{acl}{RESET}")
+    _header("Proxmox guests")
+    for vm in cp.proxmox.list_vms():
+        print(f"  {vm.vmid}  {vm.name:16} node={vm.node:11} pool={vm.pool}")
+    return 0
+
+
+def cmd_onboard(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    result = cp.onboard(args.name, _parse_department(args.department), args.role, title=args.title or "")
+    _header(f"Onboarded {args.name}")
+    print(f"  username : {_c(result.username, CYAN)}")
+    print(f"  email    : {result.email}")
+    print(f"  password : {_c(result.temp_password, CYAN)}  {DIM}(temporary){RESET}")
+    print(f"  groups   : {', '.join(result.okta_groups)}")
+    print(f"  sync     : {result.sync.summary()}")
+    _header("Access provisioned")
+    for share, level in sorted(result.truenas_access.items()):
+        print(f"  TrueNAS  {share:18} {level}")
+    for vmid, role in sorted(result.proxmox_access.items()):
+        print(f"  Proxmox  /vms/{vmid:<12} {role}")
+    if not result.truenas_access and not result.proxmox_access:
+        print(f"  {DIM}(no downstream access for this role){RESET}")
+    _save(cp, args.state)
+    return 0
+
+
+def cmd_offboard(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    try:
+        result = cp.offboard(args.user)
+    except KeyError as exc:
+        raise SystemExit(str(exc)) from exc
+    _header(f"Offboarded {args.user}")
+    print(f"  removed from groups : {', '.join(result.removed_groups) or '(none)'}")
+    print(f"  sync                : {result.sync.summary()}")
+    verdict = _c("CLEAN -- zero residual access", GREEN) if result.clean else _c("RESIDUAL ACCESS REMAINS", RED)
+    print(f"  verification        : {verdict}")
+    if not result.clean:
+        print(f"    TrueNAS: {result.residual_truenas}")
+        print(f"    Proxmox: {result.residual_proxmox}")
+    _save(cp, args.state)
+    return 0 if result.clean else 1
+
+
+def cmd_login(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    password = args.password or DEMO_PASSWORD
+    try:
+        token = cp.login(args.user, password)
+    except PermissionError:
+        print(_c("authentication failed", RED))
+        return 1
+    print(_c("authentication succeeded", GREEN))
+    print(f"  session token (JWT): {token[:48]}...")
+    return 0
+
+
+def cmd_access(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    report = cp.resolve_access(args.user)
+    _header(f"Access report for {args.user}")
+    print(f"  active              : {report.active}")
+    print(f"  Okta groups         : {', '.join(report.okta_groups) or '(none)'}")
+    print(f"  AD effective groups : {', '.join(report.ad_effective_groups) or '(none)'}")
+    _header("TrueNAS")
+    for share, level in sorted(report.truenas.items()):
+        print(f"  {share:18} {level}")
+    if not report.truenas:
+        print(f"  {DIM}(none){RESET}")
+    _header("Proxmox")
+    for path, role in sorted(report.proxmox.items()):
+        print(f"  {path:14} {role}")
+    if not report.proxmox:
+        print(f"  {DIM}(none){RESET}")
+    return 0
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    if args.system == "truenas":
+        decision = cp.check_truenas(args.user, args.resource, args.action)
+    else:
+        decision = cp.check_proxmox(args.user, int(args.resource), args.action)
+    print(
+        f"{_yes_no(decision.allowed)}  {args.user} -> {args.system}:{decision.resource} "
+        f"[{decision.action}]  granted={decision.granted} required={decision.required}"
+    )
+    print(f"  {DIM}{decision.reason}{RESET}")
+    return 0 if decision.allowed else 1
+
+
+def cmd_review(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    review = cp.access_review()
+    _header("Quarterly access review")
+    for username, ent in sorted(review["entitlements"].items()):
+        nas = len(ent["truenas"])
+        pve = len(ent["proxmox"])
+        state = "active" if ent["active"] else _c("DISABLED", RED)
+        print(f"  {username:10} {state:8} {nas} shares, {pve} VMs")
+    _header(f"Flags ({len(review['flags'])})")
+    if not review["flags"]:
+        print(_c("  none -- estate is clean", GREEN))
+    for flag in review["flags"]:
+        print(f"  {_c('!', RED)} {flag}")
+    return 0
+
+
+def cmd_sync(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    report = cp.sync()
+    _header("SCIM reconcile: Okta -> Active Directory")
+    print(f"  {report.summary()}")
+    print(f"  changed: {report.changed}")
+    _save(cp, args.state)
+    return 0
+
+
+def cmd_audit(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    _header(f"Audit log (last {args.tail})")
+    for event in cp.audit.tail(args.tail):
+        outcome = _c(event.outcome, GREEN if event.outcome in ("success", "noop") else RED)
+        print(f"  {event.system:14} {event.action:18} {event.target:22} {outcome}  {DIM}{event.detail}{RESET}")
+    return 0
+
+
+def cmd_demo(args: argparse.Namespace) -> int:
+    """A scripted end-to-end story that exercises the whole stack."""
+    print(_c("LabSuite -- Okta -> Active Directory -> TrueNAS + Proxmox", BOLD))
+    cp = build_lab()
+
+    _header("1. The lab is seeded and Okta is synced to AD")
+    print(f"  {len(cp.okta.list_users())} users, {len(cp.okta.list_groups())} Okta groups, "
+          f"{len(cp.truenas.list_shares())} TrueNAS shares, {len(cp.proxmox.list_vms())} Proxmox guests")
+
+    _header("2. Onboard a new research scientist")
+    hire = cp.onboard("Nadia Rahman", Department.RESEARCH, "research-scientist", title="Research Scientist")
+    print(f"  created {_c(hire.username, CYAN)} ({hire.email}), temp password {_c(hire.temp_password, CYAN)}")
+    print(f"  Okta groups: {', '.join(hire.okta_groups)}")
+    print(f"  -> TrueNAS: {hire.truenas_access}")
+    print(f"  -> Proxmox: {hire.proxmox_access}")
+    print(f"  {DIM}note: GPU access came from AD nesting (Research is nested in GPU-Cluster-Users),"
+          f" not a per-user grant.{RESET}")
+
+    _header("3. She logs in through Okta")
+    cp.okta.set_password(hire.username, DEMO_PASSWORD)
+    token = cp.login(hire.username, DEMO_PASSWORD)
+    print(f"  {_c('authenticated', GREEN)}; session JWT {token[:40]}...")
+
+    _header("4. Access decisions (resolved Okta -> AD -> resource)")
+    checks = [
+        ("proxmox", 101, "vm.power", "start her training VM"),
+        ("proxmox", 101, "vm.migrate", "migrate it (needs admin)"),
+        ("truenas", "research-data", "modify", "write research data"),
+        ("truenas", "legal-contracts", "read", "read legal contracts"),
+    ]
+    for system, resource, action, note in checks:
+        if system == "proxmox":
+            d = cp.check_proxmox(hire.username, int(resource), action)
+        else:
+            d = cp.check_truenas(hire.username, str(resource), action)
+        print(f"  {_yes_no(d.allowed):22} {note:32} {DIM}({d.reason}){RESET}")
+
+    _header("5. Offboard her -- same-day, verified")
+    off = cp.offboard(hire.username)
+    verdict = _c("CLEAN: zero residual access", GREEN) if off.clean else _c("RESIDUAL!", RED)
+    print(f"  deprovisioned across Okta + AD + downstream -> {verdict}")
+    print("  re-login attempt: ", end="")
+    try:
+        cp.login(hire.username, DEMO_PASSWORD)
+        print(_c("SUCCEEDED (bug!)", RED))
+    except PermissionError:
+        print(_c("correctly rejected", GREEN))
+
+    _header("6. Quarterly access review")
+    review = cp.access_review()
+    print(f"  reviewed {len(review['entitlements'])} identities; {len(review['flags'])} flag(s):")
+    for flag in review["flags"]:
+        print(f"    {_c('!', RED)} {flag}")
+
+    _header("7. Everything above was audited")
+    print(f"  {len(cp.audit.events)} audit events recorded. Last few:")
+    for event in cp.audit.tail(5):
+        print(f"    {DIM}{event.system:12} {event.action:16} {event.target:20} {event.outcome}{RESET}")
+    print()
+    return 0
+
+
+def cmd_serve(args: argparse.Namespace) -> int:
+    try:
+        import uvicorn
+
+        from labsuite.api import create_app
+    except ImportError:
+        raise SystemExit(
+            "the live API needs the [api] extra:  pip install -e '.[api]'"
+        ) from None
+    app = create_app(build_lab())
+    uvicorn.run(app, host=args.host, port=args.port)
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# Argument parsing
+# --------------------------------------------------------------------------- #
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="labsuite",
+        description="Identity-to-infrastructure access governance: Okta -> AD -> TrueNAS + Proxmox.",
+    )
+    parser.add_argument("--state", help="path to a JSON state file to load/save (persist between runs)")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    sub.add_parser("demo", help="run the scripted end-to-end story").set_defaults(func=cmd_demo)
+    sub.add_parser("org", help="print the seeded org").set_defaults(func=cmd_org)
+
+    p = sub.add_parser("onboard", help="provision a new hire across the stack")
+    p.add_argument("--name", required=True)
+    p.add_argument("--department", required=True)
+    p.add_argument("--role", required=True)
+    p.add_argument("--title", default="")
+    p.set_defaults(func=cmd_onboard)
+
+    p = sub.add_parser("offboard", help="deprovision a user same-day and verify")
+    p.add_argument("--user", required=True)
+    p.set_defaults(func=cmd_offboard)
+
+    p = sub.add_parser("login", help="authenticate a user against Okta")
+    p.add_argument("--user", required=True)
+    p.add_argument("--password")
+    p.set_defaults(func=cmd_login)
+
+    p = sub.add_parser("access", help="show everything a user can touch")
+    p.add_argument("--user", required=True)
+    p.set_defaults(func=cmd_access)
+
+    p = sub.add_parser("check", help="one audited allow/deny decision")
+    p.add_argument("--user", required=True)
+    p.add_argument("--system", required=True, choices=["truenas", "proxmox"])
+    p.add_argument("--resource", required=True, help="share name (truenas) or vmid (proxmox)")
+    p.add_argument("--action", required=True, help="read/modify/full or vm.power/vm.migrate/...")
+    p.set_defaults(func=cmd_check)
+
+    sub.add_parser("review", help="quarterly access review with anomaly flags").set_defaults(func=cmd_review)
+    sub.add_parser("sync", help="run the SCIM reconcile now").set_defaults(func=cmd_sync)
+
+    p = sub.add_parser("audit", help="print the audit trail")
+    p.add_argument("--tail", type=int, default=20)
+    p.set_defaults(func=cmd_audit)
+
+    p = sub.add_parser("serve", help="launch the live FastAPI control plane (needs [api] extra)")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8000)
+    p.set_defaults(func=cmd_serve)
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        return args.func(args)
+    except TokenError as exc:  # pragma: no cover - defensive
+        print(_c(f"token error: {exc}", RED))
+        return 1
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

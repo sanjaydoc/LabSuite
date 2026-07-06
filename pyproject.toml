@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "labsuite"
+version = "0.1.0"
+description = "A from-scratch identity-to-infrastructure access-governance control plane for a research lab: Okta to Active Directory to TrueNAS + Proxmox, provisioned, synced (SCIM), and enforced from one place."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Dr. Sanjay Anbu" }]
+keywords = [
+    "iam",
+    "identity-and-access-management",
+    "okta",
+    "active-directory",
+    "scim",
+    "rbac",
+    "truenas",
+    "proxmox",
+    "provisioning",
+    "access-governance",
+    "it-operations",
+    "onboarding",
+    "offboarding",
+]
+
+# The whole control plane -- the Okta/AD/SCIM/TrueNAS/Proxmox domain models, the
+# sync engine, the access-decision engine, the audit log, and the CLI -- is
+# PURE-PYTHON and dependency-free. It runs anywhere Python 3.10+ runs, including
+# CI, with no network and no external services. FastAPI is only needed for the
+# optional live HTTP API (OIDC-ish login, SCIM endpoints, dashboard): install the
+# [api] extra for that.
+dependencies = []
+
+[project.optional-dependencies]
+api = ["fastapi>=0.100", "uvicorn>=0.22"]
+dev = ["pytest>=7", "ruff>=0.1", "fastapi>=0.100", "uvicorn>=0.22", "httpx>=0.24"]
+
+[project.scripts]
+labsuite = "labsuite.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/sanjaydoc/LabSuite"
+Repository = "https://github.com/sanjaydoc/LabSuite"
+Website = "https://sanjaydoc.github.io/LabSuite/"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI's dependency-injection idiom intentionally calls Depends()/Header()/
+# Body() in argument defaults; B008 is a false positive there.
+"src/labsuite/api.py" = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]

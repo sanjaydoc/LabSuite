@@ -178,6 +178,438 @@ window.LABSUITE_DATA = {
     "legal-counsel": "mac-standard",
     "it-admin": "mac-admin"
   },
+  "gated_shares": {
+    "lab-raw-signals": [
+      "Biosafety"
+    ],
+    "invivo-study-data": [
+      "IACUC",
+      "Biosafety"
+    ]
+  },
+  "role_trainings": {
+    "ml-scientist": [
+      "Data-Handling"
+    ],
+    "research-scientist": [
+      "Data-Handling",
+      "Biosafety"
+    ],
+    "invivo-scientist": [
+      "Data-Handling",
+      "Biosafety",
+      "IACUC"
+    ],
+    "vector-core": [
+      "Data-Handling",
+      "Biosafety"
+    ],
+    "platform-engineer": [
+      "Data-Handling"
+    ],
+    "lab-technician": [
+      "Biosafety",
+      "Chemical-Safety"
+    ],
+    "lab-ops": [
+      "Chemical-Safety"
+    ],
+    "compliance": [
+      "Data-Handling",
+      "Biosafety",
+      "IACUC"
+    ],
+    "facilities": [
+      "Chemical-Safety"
+    ],
+    "legal-counsel": [
+      "Data-Handling"
+    ],
+    "it-admin": [
+      "Data-Handling"
+    ]
+  },
+  "saas_catalog": {
+    "Slack": 12.5,
+    "Google-Workspace": 18.0,
+    "1Password": 8.0,
+    "Benchling": 55.0,
+    "GitHub": 21.0,
+    "Coupa": 30.0,
+    "Kandji": 6.0
+  },
+  "saas_baseline": [
+    "Slack",
+    "Google-Workspace",
+    "1Password"
+  ],
+  "saas_role_apps": {
+    "ml-scientist": [
+      "Benchling",
+      "GitHub"
+    ],
+    "research-scientist": [
+      "Benchling"
+    ],
+    "invivo-scientist": [
+      "Benchling"
+    ],
+    "vector-core": [
+      "Benchling"
+    ],
+    "platform-engineer": [
+      "GitHub"
+    ],
+    "lab-technician": [
+      "Benchling"
+    ],
+    "lab-ops": [
+      "Coupa"
+    ],
+    "compliance": [],
+    "facilities": [
+      "Coupa"
+    ],
+    "legal-counsel": [],
+    "it-admin": [
+      "Kandji",
+      "GitHub"
+    ]
+  },
+  "compliance_records": {
+    "anguyen": {
+      "Data-Handling": "current",
+      "Biosafety": "current"
+    },
+    "gkim": {
+      "Data-Handling": "current",
+      "Biosafety": "current"
+    },
+    "rpatel": {
+      "Data-Handling": "current"
+    },
+    "mchen": {
+      "Data-Handling": "current"
+    },
+    "talvarez": {
+      "Data-Handling": "current",
+      "Biosafety": "current",
+      "IACUC": "current"
+    },
+    "nosei": {
+      "Data-Handling": "current",
+      "Biosafety": "current",
+      "IACUC": "current"
+    },
+    "bokafor": {
+      "Data-Handling": "current"
+    },
+    "cdiaz": {
+      "Biosafety": "current",
+      "Chemical-Safety": "current"
+    },
+    "drao": {
+      "Data-Handling": "current",
+      "Biosafety": "current"
+    },
+    "lpark": {
+      "Chemical-Safety": "current"
+    },
+    "ipetrov": {
+      "Data-Handling": "current",
+      "Biosafety": "current",
+      "IACUC": "current"
+    },
+    "freed": {
+      "Chemical-Safety": "current"
+    },
+    "epark": {
+      "Data-Handling": "current"
+    },
+    "sanbu": {
+      "Data-Handling": "current"
+    }
+  },
+  "operations": {
+    "saas": [
+      {
+        "name": "Slack",
+        "monthly_cost_per_seat": 12.5,
+        "assignees": [
+          "anguyen",
+          "bokafor",
+          "cdiaz",
+          "drao",
+          "epark",
+          "freed",
+          "gkim",
+          "ipetrov",
+          "lpark",
+          "mchen",
+          "nosei",
+          "rpatel",
+          "sanbu",
+          "talvarez"
+        ]
+      },
+      {
+        "name": "Google-Workspace",
+        "monthly_cost_per_seat": 18.0,
+        "assignees": [
+          "anguyen",
+          "bokafor",
+          "cdiaz",
+          "drao",
+          "epark",
+          "freed",
+          "gkim",
+          "ipetrov",
+          "lpark",
+          "mchen",
+          "nosei",
+          "rpatel",
+          "sanbu",
+          "talvarez"
+        ]
+      },
+      {
+        "name": "1Password",
+        "monthly_cost_per_seat": 8.0,
+        "assignees": [
+          "anguyen",
+          "bokafor",
+          "cdiaz",
+          "drao",
+          "epark",
+          "freed",
+          "gkim",
+          "ipetrov",
+          "lpark",
+          "mchen",
+          "nosei",
+          "rpatel",
+          "sanbu",
+          "talvarez"
+        ]
+      },
+      {
+        "name": "Benchling",
+        "monthly_cost_per_seat": 55.0,
+        "assignees": [
+          "anguyen",
+          "cdiaz",
+          "drao",
+          "gkim",
+          "mchen",
+          "nosei",
+          "rpatel",
+          "talvarez"
+        ]
+      },
+      {
+        "name": "GitHub",
+        "monthly_cost_per_seat": 21.0,
+        "assignees": [
+          "bokafor",
+          "mchen",
+          "rpatel",
+          "sanbu"
+        ]
+      },
+      {
+        "name": "Coupa",
+        "monthly_cost_per_seat": 30.0,
+        "assignees": [
+          "freed",
+          "lpark"
+        ]
+      },
+      {
+        "name": "Kandji",
+        "monthly_cost_per_seat": 6.0,
+        "assignees": [
+          "sanbu"
+        ]
+      }
+    ],
+    "equipment": [
+      {
+        "asset_tag": "EQ-001",
+        "name": "Leica Cryostat CM1950",
+        "location": "Histology",
+        "owner_team": "Lab",
+        "maintenance_in_days": 5
+      },
+      {
+        "asset_tag": "EQ-002",
+        "name": "Illumina NextSeq 2000",
+        "location": "Sequencing",
+        "owner_team": "Bio",
+        "maintenance_in_days": 40
+      },
+      {
+        "asset_tag": "EQ-003",
+        "name": "Zeiss LSM 980 Confocal",
+        "location": "Microscopy",
+        "owner_team": "Bio",
+        "maintenance_in_days": -3
+      },
+      {
+        "asset_tag": "EQ-004",
+        "name": "Thermo -80C Freezer A",
+        "location": "Cold Storage",
+        "owner_team": "Lab-Ops",
+        "maintenance_in_days": 12
+      },
+      {
+        "asset_tag": "EQ-005",
+        "name": "Hamilton STAR Liquid Handler",
+        "location": "Automation",
+        "owner_team": "Platform",
+        "maintenance_in_days": 60
+      },
+      {
+        "asset_tag": "EQ-006",
+        "name": "Sartorius Analytical Balance",
+        "location": "Lab",
+        "owner_team": "Lab-Ops",
+        "maintenance_in_days": -10
+      },
+      {
+        "asset_tag": "EQ-007",
+        "name": "Stereotaxic Surgery Rig",
+        "location": "In-Vivo Suite",
+        "owner_team": "In-Vivo",
+        "maintenance_in_days": 20
+      }
+    ],
+    "inventory": [
+      {
+        "sku": "RG-DMEM",
+        "name": "DMEM media",
+        "location": "Cold Room 2",
+        "qty": 8,
+        "reorder_point": 10,
+        "unit": "bottles",
+        "low": true
+      },
+      {
+        "sku": "RG-FBS",
+        "name": "Fetal Bovine Serum",
+        "location": "-20C Freezer",
+        "qty": 25,
+        "reorder_point": 10,
+        "unit": "bottles",
+        "low": false
+      },
+      {
+        "sku": "RG-AAV9",
+        "name": "AAV9 packaging kit",
+        "location": "Vector Core",
+        "qty": 2,
+        "reorder_point": 3,
+        "unit": "kits",
+        "low": true
+      },
+      {
+        "sku": "RG-PBS",
+        "name": "PBS 1x",
+        "location": "Bench 4",
+        "qty": 40,
+        "reorder_point": 12,
+        "unit": "bottles",
+        "low": false
+      },
+      {
+        "sku": "RG-ISO",
+        "name": "Isoflurane",
+        "location": "In-Vivo Suite",
+        "qty": 4,
+        "reorder_point": 6,
+        "unit": "bottles",
+        "low": true
+      },
+      {
+        "sku": "RG-TIP",
+        "name": "Filter tips 200uL",
+        "location": "Consumables",
+        "qty": 60,
+        "reorder_point": 20,
+        "unit": "boxes",
+        "low": false
+      }
+    ],
+    "vendors": [
+      {
+        "name": "Okta",
+        "category": "Identity",
+        "renewal_in_days": 210,
+        "annual_cost": 42000
+      },
+      {
+        "name": "Benchling",
+        "category": "ELN / LIMS",
+        "renewal_in_days": 35,
+        "annual_cost": 66000
+      },
+      {
+        "name": "Illumina",
+        "category": "Sequencing reagents",
+        "renewal_in_days": 120,
+        "annual_cost": 180000
+      },
+      {
+        "name": "Charles River",
+        "category": "Animal supply",
+        "renewal_in_days": 200,
+        "annual_cost": 240000
+      },
+      {
+        "name": "Kandji",
+        "category": "MDM",
+        "renewal_in_days": 15,
+        "annual_cost": 9000
+      },
+      {
+        "name": "Slack",
+        "category": "Comms",
+        "renewal_in_days": 320,
+        "annual_cost": 15000
+      }
+    ],
+    "safety": [
+      {
+        "area": "BSL-2 Lab",
+        "check": "Biosafety cabinet certification current",
+        "status": "pass",
+        "note": ""
+      },
+      {
+        "area": "Chem Store",
+        "check": "Flammables cabinet grounded",
+        "status": "pass",
+        "note": ""
+      },
+      {
+        "area": "In-Vivo Suite",
+        "check": "Sharps container <75% full",
+        "status": "open",
+        "note": "overfull at rig 2"
+      },
+      {
+        "area": "Cold Room 2",
+        "check": "Emergency egress clear",
+        "status": "open",
+        "note": "boxes blocking exit"
+      },
+      {
+        "area": "Loading Dock",
+        "check": "Eyewash station flushed weekly",
+        "status": "pass",
+        "note": ""
+      }
+    ]
+  },
   "users": [
     {
       "username": "anguyen",

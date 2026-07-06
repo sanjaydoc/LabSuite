@@ -14,12 +14,15 @@ import json
 from pathlib import Path
 
 from labsuite.models import PROXMOX_PRIVILEGES, AccessLevel, Department, ProxmoxRole
+from labsuite.operations import SAAS_BASELINE, SAAS_CATALOG, SAAS_ROLE_APPS
 from labsuite.policy import (
     BASELINE_GROUP,
     DEPARTMENT_GROUP,
+    GATED_SHARES,
     IMAGE_CATALOG,
     ROLE_BLUEPRINTS,
     ROLE_IMAGE,
+    ROLE_TRAININGS,
 )
 from labsuite.seed import DEMO_PASSWORD, build_lab
 
@@ -84,6 +87,13 @@ def main() -> None:
         "proxmox_privileges": {p: int(r) for p, r in PROXMOX_PRIVILEGES.items()},
         "image_catalog": image_catalog,
         "role_image": dict(ROLE_IMAGE),
+        "gated_shares": dict(GATED_SHARES),
+        "role_trainings": dict(ROLE_TRAININGS),
+        "saas_catalog": dict(SAAS_CATALOG),
+        "saas_baseline": list(SAAS_BASELINE),
+        "saas_role_apps": dict(SAAS_ROLE_APPS),
+        "compliance_records": cp.compliance.all_records(),
+        "operations": cp.ops.to_dict(),
         "users": users,
         "ad_nesting": ad_nesting,
         "shares": shares,

@@ -42,7 +42,11 @@
       <div class="grp">Govern</div>
       <button class="navitem" data-view="explorer">Access explorer</button>
       <button class="navitem" data-view="review">Access review</button>
+      <button class="navitem" data-view="compliance">Compliance</button>
       <button class="navitem" data-view="audit">Audit log</button>
+      <div class="grp">Operations</div>
+      <button class="navitem" data-view="saas">SaaS &amp; cost</button>
+      <button class="navitem" data-view="ops">Lab ops</button>
       <div class="grp">Learn</div>
       <button class="navitem" data-view="architecture">Architecture</button>
       <button class="navitem" data-view="login">Sign-in demo</button>
@@ -146,6 +150,28 @@
         <h2>Audit log</h2>
         <div class="sub">Append-only — every mutation and access decision in this session.</div>
         <div class="card" id="audit-list"></div>
+      </section>
+
+      <!-- Compliance -->
+      <section class="view" id="view-compliance">
+        <h2>Compliance</h2>
+        <div class="sub">Training records that gate sensitive access. Toggle a training to see gated access unlock or auto-revoke.</div>
+        <div class="card" style="padding:6px 18px"><table id="comp-table"></table></div>
+      </section>
+
+      <!-- SaaS & cost -->
+      <section class="view" id="view-saas">
+        <h2>SaaS &amp; cost</h2>
+        <div class="sub">Who has a seat in what — and what it costs. The source of truth for licence spend.</div>
+        <div class="stats" id="saas-stats" style="margin-bottom:14px"></div>
+        <div class="card" style="padding:6px 18px"><table id="saas-table"></table></div>
+      </section>
+
+      <!-- Lab ops -->
+      <section class="view" id="view-ops">
+        <h2>Lab operations</h2>
+        <div class="sub">Equipment, inventory, vendors, and facility safety — with the flags a reviewer wants.</div>
+        <div id="ops-body"></div>
       </section>
 
       <!-- Architecture -->

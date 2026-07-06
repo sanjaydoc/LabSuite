@@ -41,6 +41,69 @@ class DemoEngine {
       const n = parseInt(dev.asset_tag.replace(/\D/g, ""), 10);
       if (n > this.deviceCounter) this.deviceCounter = n;
     }
+    // compliance training records: username -> {training: status}
+    this.trainings = {};
+    for (const u in data.compliance_records || {}) this.trainings[u] = { ...data.compliance_records[u] };
+    this.gated = data.gated_shares || {};
+    // operations: SaaS + registries
+    const ops = data.operations || {};
+    this.saas = {};
+    for (const a of ops.saas || []) this.saas[a.name] = { name: a.name, cost: a.monthly_cost_per_seat, assignees: new Set(a.assignees || []) };
+    this.equipment = ops.equipment || [];
+    this.inventory = ops.inventory || [];
+    this.vendors = ops.vendors || [];
+    this.safety = ops.safety || [];
+  }
+
+  // ---- compliance ---------------------------------------------------
+  missingForShare(username, share) {
+    const req = this.gated[share] || [];
+    const rec = this.trainings[username] || {};
+    return req.filter((t) => rec[t] !== "current");
+  }
+  completeTraining(username, training) {
+    (this.trainings[username] ||= {})[training] = "current";
+    this.log("compliance", "training.complete", username, "success", training);
+  }
+  expireTraining(username, training) {
+    (this.trainings[username] ||= {})[training] = "expired";
+    this.log("compliance", "training.expire", username, "denied", training);
+  }
+  trainingsFor(username) { return { ...(this.trainings[username] || {}) }; }
+
+  // ---- SaaS ---------------------------------------------------------
+  saasAppsForRole(role) {
+    const seen = {};
+    for (const a of [...(this.d.saas_baseline || []), ...((this.d.saas_role_apps || {})[role] || [])]) seen[a] = 1;
+    return Object.keys(seen);
+  }
+  grantSaas(username, role) {
+    const apps = this.saasAppsForRole(role);
+    for (const a of apps) {
+      (this.saas[a] ||= { name: a, cost: (this.d.saas_catalog || {})[a] || 0, assignees: new Set() }).assignees.add(username);
+    }
+    this.log("saas", "saas.provision", username, "success", apps.join(", "));
+    return apps;
+  }
+  revokeSaas(username) {
+    const removed = [];
+    for (const name in this.saas) if (this.saas[name].assignees.delete(username)) removed.push(name);
+    if (removed.length) this.log("saas", "saas.revoke", username, "success", removed.join(", "));
+    return removed.sort();
+  }
+  appsFor(username) { return Object.keys(this.saas).filter((n) => this.saas[n].assignees.has(username)).sort(); }
+  monthlySpend() { return Object.values(this.saas).reduce((t, a) => t + a.cost * a.assignees.size, 0); }
+  isActive(username) { const u = this.users[username]; return !!(u && u.active); }
+  opsSummary() {
+    return {
+      monthly_saas_spend: this.monthlySpend(),
+      saas_apps: Object.keys(this.saas).length,
+      orphaned_seats: Object.values(this.saas).flatMap((a) => [...a.assignees].filter((u) => !this.isActive(u)).map((u) => `${a.name}:${u}`)),
+      overdue_equipment: this.equipment.filter((e) => e.maintenance_in_days < 0).map((e) => e.name),
+      low_stock: this.inventory.filter((i) => i.low).map((i) => i.name),
+      upcoming_renewals: this.vendors.filter((v) => v.renewal_in_days <= 60).map((v) => `${v.name} (${v.renewal_in_days}d)`),
+      open_safety: this.safety.filter((s) => s.status === "open").map((s) => `${s.area}: ${s.check}`),
+    };
   }
 
   assignDevice(username, role) {
@@ -102,17 +165,25 @@ class DemoEngine {
 
   resolveAccess(username) {
     const u = this.users[username];
+    const active = !!(u && u.active);
     const groups = this.effectiveGroups(u);
-    const truenas = {}, proxmox = {};
-    for (const s in this.d.shares) { const r = this.truenasLevel(s, groups); if (r.level > 0) truenas[s] = r.name; }
+    const truenas = {}, proxmox = {}, blocked = {};
+    for (const s in this.d.shares) {
+      const r = this.truenasLevel(s, groups);
+      if (r.level <= 0) continue;
+      const missing = active ? this.missingForShare(username, s) : [];
+      if (missing.length) blocked[s] = missing;
+      else truenas[s] = r.name;
+    }
     for (const vmid in this.d.vms) { const r = this.proxmoxRole(vmid, groups); if (r.role > 0) proxmox[this.d.vms[vmid].path] = r.name; }
     const direct = new Set(u ? u.okta_groups : []);
     const nested = [...groups].filter((g) => !direct.has(g));
     return {
-      username, active: !!(u && u.active),
+      username, active,
       okta_groups: u ? [...u.okta_groups].sort() : [],
       ad_effective_groups: [...groups].sort(), nested,
       truenas, proxmox,
+      trainings: this.trainingsFor(username), blocked,
     };
   }
 
@@ -139,10 +210,14 @@ class DemoEngine {
     this.log("ad", "user.provision", username, "success", "SCIM create");
     const device = this.assignDevice(username, role);
     this.log("endpoint", "device.provision", device.asset_tag, "success", `${device.model} · ${device.image}`);
+    // compliance: register required trainings (pending); SaaS: grant seats
+    for (const t of (this.d.role_trainings || {})[role] || []) (this.trainings[username] ||= {})[t] ||= "missing";
+    const saas = this.grantSaas(username, role);
     const access = this.resolveAccess(username);
     const proxmox = {};
     for (const vmid in this.d.vms) { const p = this.d.vms[vmid].path; if (access.proxmox[p]) proxmox[vmid] = access.proxmox[p]; }
-    return { username, email, temp_password: passphrase(), okta_groups: groups, truenas: access.truenas, proxmox, device };
+    return { username, email, temp_password: passphrase(), okta_groups: groups, truenas: access.truenas, proxmox, device,
+      trainings: access.trainings, gated: access.blocked, saas };
   }
 
   offboard(username) {
@@ -153,20 +228,25 @@ class DemoEngine {
     this.log("ad", "user.deactivate", username, "success", "SCIM deactivate");
     const device = this.wipeDevice(username);
     if (device) this.log("endpoint", "device.wipe", device.asset_tag, "success", "wipe & return");
+    const saasRevoked = this.revokeSaas(username);
     const a = this.resolveAccess(username);
     const clean = Object.keys(a.truenas).length === 0 && Object.keys(a.proxmox).length === 0;
     this.log("control-plane", "offboard.verify", username, clean ? "success" : "error", clean ? "zero residual" : "RESIDUAL");
-    return { username, removed_groups: removed, clean, residual_truenas: a.truenas, residual_proxmox: a.proxmox, device };
+    return { username, removed_groups: removed, clean, residual_truenas: a.truenas, residual_proxmox: a.proxmox, device, saas_revoked: saasRevoked };
   }
 
   checkTruenas(username, share, action) {
     const required = { read: 1, modify: 2, full: 3 }[action];
     const groups = this.effectiveGroups(this.users[username]);
     const r = this.truenasLevel(share, groups);
-    const allowed = r.level >= required;
+    let allowed = r.level >= required;
+    const missing = this.missingForShare(username, share);
+    let reason;
+    if (allowed && missing.length) { allowed = false; reason = `BLOCKED — training not current: ${missing.join(", ")}`; }
+    else if (allowed) reason = `granted via ${r.via.join(", ")}`;
+    else reason = "no group grants sufficient access";
     this.log(username, "access.check", `truenas:${share}`, allowed ? "success" : "denied", `${action} -> ${r.name}`);
-    return { allowed, granted: r.name, required: this.d.access_levels[required], via: r.via,
-      reason: allowed ? `granted via ${r.via.join(", ")}` : "no group grants sufficient access" };
+    return { allowed, granted: r.name, required: this.d.access_levels[required], via: r.via, reason };
   }
 
   checkProxmox(username, vmid, priv) {
@@ -241,6 +321,18 @@ const demoBackend = {
   async login(u, p) { return engine.login(u, p); },
   async audit() { return engine.audit.slice().reverse(); },
   async devices() { return engine.listDevices(); },
+  async complianceRecords() { return engine.trainings; },
+  async completeTraining(u, t) { engine.completeTraining(u, t); },
+  async expireTraining(u, t) { engine.expireTraining(u, t); },
+  async saas() {
+    return { monthly_spend: engine.monthlySpend(),
+      apps: Object.values(engine.saas).map((a) => ({ name: a.name, monthly_cost_per_seat: a.cost, assignees: [...a.assignees].sort() })) };
+  },
+  async ops() { return engine.opsSummary(); },
+  async assets() { return engine.equipment; },
+  async inventory() { return engine.inventory; },
+  async vendors() { return engine.vendors; },
+  async safety() { return engine.safety; },
   async usernames() { return Object.keys(engine.users).sort(); },
 };
 
@@ -281,6 +373,15 @@ const liveBackend = {
   },
   async audit() { try { return (await this._json("/audit")).events; } catch { return []; } },
   async devices() { try { return (await this._json("/devices")).devices; } catch { return []; } },
+  async complianceRecords() { try { return (await this._json("/compliance")).records; } catch { return {}; } },
+  async completeTraining(u, t) { await this._json("/compliance/complete", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: u, training: t }) }); },
+  async expireTraining(u, t) { await this._json("/compliance/expire", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: u, training: t }) }); },
+  async saas() { try { return await this._json("/saas"); } catch { return { monthly_spend: 0, apps: [] }; } },
+  async ops() { try { return await this._json("/ops"); } catch { return {}; } },
+  async assets() { try { return (await this._json("/assets")).equipment; } catch { return []; } },
+  async inventory() { try { return (await this._json("/inventory")).inventory; } catch { return []; } },
+  async vendors() { try { return (await this._json("/vendors")).vendors; } catch { return []; } },
+  async safety() { try { return (await this._json("/safety")).safety; } catch { return []; } },
   async usernames() {
     try { return (await this._json("/scim/v2/Users")).Resources.map((u) => u.userName).sort(); }
     catch { return Object.keys(engine.users).sort(); }
@@ -316,6 +417,20 @@ function accessTables(a) {
       <div><div class="label">TrueNAS</div><table>${nasRows}</table></div>
       <div><div class="label">Proxmox</div><table>${pveRows}</table></div>
     </div>`;
+}
+
+function explorerCompliance(a) {
+  const trainings = a.trainings || {};
+  const blocked = a.blocked || {};
+  if (!Object.keys(trainings).length && !Object.keys(blocked).length) return "";
+  const tchips = Object.entries(trainings).map(([t, s]) => {
+    const cls = s === "current" ? "allow" : s === "expired" ? "deny" : "";
+    return `<span class="chip ${cls}">${esc(t)}: ${esc(s)}</span>`;
+  }).join(" ");
+  const bchips = Object.entries(blocked).map(([s, m]) =>
+    `<div class="muted" style="font-size:.83rem"><span class="chip deny">blocked</span> ${esc(s)} — needs ${m.map(esc).join(", ")}</div>`).join("");
+  return `<hr class="divider" /><div class="label">Compliance / training</div>
+    <div class="tags" style="margin:.3rem 0 .4rem">${tchips || '<span class="muted">none</span>'}</div>${bchips}`;
 }
 
 function groupTags(a) {
@@ -369,8 +484,24 @@ async function doOnboard() {
       <span class="k">Okta groups</span><span class="tags">${r.okta_groups.map((g) => `<span class="tag">${esc(g)}</span>`).join("")}</span>
     </div>
     <div class="grid2"><div><div class="label">TrueNAS</div><table>${nas}</table></div><div><div class="label">Proxmox</div><table>${pve}</table></div></div>
-    ${deviceCard(r.device, "imaged & shipped (day one)")}`;
+    ${deviceCard(r.device, "imaged & shipped (day one)")}
+    ${onboardExtras(r)}`;
   await refreshUserSelects();
+}
+
+function onboardExtras(r) {
+  let html = "";
+  if (r.trainings && Object.keys(r.trainings).length) {
+    const gated = Object.entries(r.gated || {}).map(([s, m]) =>
+      `<div class="muted" style="font-size:.83rem"><span class="chip deny">gated</span> ${esc(s)} — until ${m.map(esc).join(", ")}</div>`).join("");
+    html += `<hr class="divider" /><div class="label">Compliance</div>
+      <div class="tags" style="margin:.3rem 0">${Object.keys(r.trainings).map((t) => `<span class="tag">${esc(t)} pending</span>`).join("")}</div>${gated}`;
+  }
+  if (r.saas && r.saas.length) {
+    html += `<hr class="divider" /><div class="label">SaaS provisioned</div>
+      <div class="tags" style="margin-top:.3rem">${r.saas.map((a) => `<span class="tag">${esc(a)}</span>`).join("")}</div>`;
+  }
+  return html;
 }
 
 function deviceCard(dev, tagline) {
@@ -400,7 +531,8 @@ async function doOffboard() {
       : '<span class="chip deny">✗ RESIDUAL ACCESS REMAINS</span>'}</div>
     ${r.clean ? '<p class="muted" style="margin:.8rem 0 0;font-size:.88rem">Re-resolved across TrueNAS + Proxmox after deprovisioning — nothing remains.</p>'
       : `<pre>${esc(JSON.stringify({ truenas: r.residual_truenas, proxmox: r.residual_proxmox }, null, 2))}</pre>`}
-    ${deviceCard(r.device, "flagged for return")}`;
+    ${deviceCard(r.device, "flagged for return")}
+    ${r.saas_revoked && r.saas_revoked.length ? `<hr class="divider" /><div class="label">SaaS seats reclaimed</div><div class="tags" style="margin-top:.3rem">${r.saas_revoked.map((a) => `<span class="tag">${esc(a)}</span>`).join("")}</div>` : ""}`;
   await refreshUserSelects();
 }
 
@@ -431,7 +563,8 @@ async function renderExplorer() {
         <span class="k">AD effective</span><span class="tags">${groupTags(a) || '<span class="muted">none</span>'}</span>
       </div>
       ${accessTables(a)}
-      <p class="muted" style="font-size:.8rem;margin:.9rem 0 0">Dashed tags ⤴ are inherited through AD group nesting.</p>
+      ${explorerCompliance(a)}
+      <p class="muted" style="font-size:.8rem;margin:.9rem 0 0">Dashed tags ⤴ are inherited through AD nesting. Blocked shares need current training.</p>
     </div>`;
   fillCheckControls();
 }
@@ -489,6 +622,68 @@ async function renderAudit() {
     </div>`).join("") : '<div class="muted">No events yet — try onboarding or a decision, then return here.</div>';
 }
 
+async function renderCompliance() {
+  const records = await backend.complianceRecords();
+  const trainings = ["Data-Handling", "Biosafety", "Chemical-Safety", "IACUC"];
+  const chip = (s) => s === "current" ? '<span class="chip allow">current</span>'
+    : s === "expired" ? '<span class="chip deny">expired</span>' : '<span class="chip">missing</span>';
+  const rows = Object.keys(records).sort().map((u) => {
+    const cells = trainings.map((t) => {
+      if (!(t in records[u])) return "<td></td>";
+      const s = records[u][t];
+      const act = s === "current" ? "expire" : "complete";
+      const label = s === "current" ? "lapse" : "grant";
+      return `<td>${chip(s)} <button class="btn btn-sm" data-u="${esc(u)}" data-t="${esc(t)}" data-act="${act}" style="padding:.15rem .5rem;font-size:.72rem;margin-left:.3rem">${label}</button></td>`;
+    }).join("");
+    return `<tr><td><b>${esc(u)}</b></td>${cells}</tr>`;
+  }).join("");
+  byId("comp-table").innerHTML =
+    `<tr><th>User</th>${trainings.map((t) => `<th>${esc(t)}</th>`).join("")}</tr>${rows}`;
+  $$("#comp-table button").forEach((b) => b.onclick = async () => {
+    if (b.dataset.act === "expire") await backend.expireTraining(b.dataset.u, b.dataset.t);
+    else await backend.completeTraining(b.dataset.u, b.dataset.t);
+    renderCompliance();
+  });
+}
+
+async function renderSaas() {
+  const data = await backend.saas();
+  const annual = (data.annual_cost != null) ? data.annual_cost : data.monthly_spend * 12;
+  byId("saas-stats").innerHTML = [
+    ["$" + Math.round(data.monthly_spend).toLocaleString(), "Monthly spend"],
+    ["$" + Math.round(annual).toLocaleString(), "Annual"],
+    [String(data.apps.length), "Apps"],
+    [String(data.apps.reduce((t, a) => t + a.assignees.length, 0)), "Seats"],
+  ].map(([n, l]) => `<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+  const rows = data.apps.slice().sort((a, b) => a.name.localeCompare(b.name)).map((a) => {
+    const monthly = a.monthly_cost_per_seat * a.assignees.length;
+    return `<tr><td><b>${esc(a.name)}</b></td><td>${a.assignees.length}</td>
+      <td>$${a.monthly_cost_per_seat.toFixed(1)}</td><td>$${monthly.toFixed(0)}/mo</td>
+      <td class="muted">${a.assignees.map(esc).join(", ")}</td></tr>`;
+  }).join("");
+  byId("saas-table").innerHTML = `<tr><th>App</th><th>Seats</th><th>$/seat</th><th>Cost</th><th>Assignees</th></tr>${rows}`;
+}
+
+async function renderOps() {
+  const [equipment, inventory, vendors, safety] = await Promise.all(
+    [backend.assets(), backend.inventory(), backend.vendors(), backend.safety()]);
+  const maint = (d) => d < 0 ? `<span class="chip deny">overdue ${-d}d</span>`
+    : d <= 14 ? `<span class="chip">due ${d}d</span>` : `${d}d`;
+  const eq = equipment.map((e) => `<tr><td>${esc(e.asset_tag)}</td><td>${esc(e.name)}</td><td>${esc(e.location)}</td><td>${maint(e.maintenance_in_days)}</td></tr>`).join("");
+  const inv = inventory.map((i) => `<tr><td>${esc(i.name)}</td><td>${esc(i.location)}</td><td>${i.qty} ${esc(i.unit)}</td><td>${i.low ? '<span class="chip deny">low</span>' : '<span class="chip allow">ok</span>'}</td></tr>`).join("");
+  const ven = vendors.slice().sort((a, b) => a.renewal_in_days - b.renewal_in_days).map((v) => `<tr><td><b>${esc(v.name)}</b></td><td>${esc(v.category)}</td><td>${v.renewal_in_days <= 60 ? `<span class="chip">renews ${v.renewal_in_days}d</span>` : v.renewal_in_days + "d"}</td><td>$${v.annual_cost.toLocaleString()}/yr</td></tr>`).join("");
+  const saf = safety.map((s) => `<tr><td>${s.status === "open" ? '<span class="chip deny">OPEN</span>' : '<span class="chip allow">pass</span>'}</td><td>${esc(s.area)}</td><td>${esc(s.check)}<span class="muted">${s.note ? " — " + esc(s.note) : ""}</span></td></tr>`).join("");
+  byId("ops-body").innerHTML = `
+    <div class="grid2">
+      <div class="card"><div class="label" style="margin-bottom:6px">Equipment &amp; maintenance</div><table><tr><th>Asset</th><th>Name</th><th>Location</th><th>Maint</th></tr>${eq}</table></div>
+      <div class="card"><div class="label" style="margin-bottom:6px">Inventory</div><table><tr><th>Item</th><th>Location</th><th>Qty</th><th></th></tr>${inv}</table></div>
+    </div>
+    <div class="grid2" style="margin-top:16px">
+      <div class="card"><div class="label" style="margin-bottom:6px">Vendors &amp; renewals</div><table><tr><th>Vendor</th><th>Category</th><th>Renewal</th><th>Annual</th></tr>${ven}</table></div>
+      <div class="card"><div class="label" style="margin-bottom:6px">Facility safety</div><table><tr><th></th><th>Area</th><th>Check</th></tr>${saf}</table></div>
+    </div>`;
+}
+
 function renderArchitecture() {
   byId("arch").innerHTML = `
     <div style="display:grid;gap:12px;max-width:560px">
@@ -533,7 +728,7 @@ async function refreshUserSelects() {
 const RENDERERS = {
   overview: renderOverview, directory: renderDirectory, explorer: renderExplorer,
   review: renderReview, audit: renderAudit, architecture: renderArchitecture,
-  devices: renderDevices,
+  devices: renderDevices, compliance: renderCompliance, saas: renderSaas, ops: renderOps,
 };
 
 function go(view) {

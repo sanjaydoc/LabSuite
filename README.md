@@ -160,14 +160,61 @@ onboarding, access resolution, and reviews with nothing installed.
 
 ## Quickstart
 
-```bash
-# Python 3.10+; the core needs no third-party packages at all.
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e .            # core only  (add ".[api]" for the live HTTP API + GUI)
+**Requires Python 3.10, 3.11, or 3.12.** The core has **zero third-party
+dependencies**; the `.[api]` extra (FastAPI + Uvicorn) is only for the live HTTP
+API and web GUI.
 
-# See the whole thing work end-to-end:
+<details open>
+<summary><b>macOS</b></summary>
+
+```bash
+git clone https://github.com/sanjaydoc/LabSuite.git
+cd LabSuite
+
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -e ".[dev]"          # core + API + test tooling  (or just: pip install -e .)
+
+labsuite demo                    # see the whole thing work end-to-end
+```
+</details>
+
+<details>
+<summary><b>Linux</b></summary>
+
+```bash
+git clone https://github.com/sanjaydoc/LabSuite.git
+cd LabSuite
+
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -e ".[dev]"          # core + API + test tooling  (or just: pip install -e .)
+
 labsuite demo
 ```
+> If `python3 -m venv` fails, install the venv package first: `sudo apt install python3-venv`.
+</details>
+
+<details>
+<summary><b>Windows</b> (PowerShell)</summary>
+
+```powershell
+git clone https://github.com/sanjaydoc/LabSuite.git
+cd LabSuite
+
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"   # core + API + test tooling  (or just: -e .)
+
+labsuite demo
+```
+> If PowerShell blocks the activate script, run once:
+> `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`.
+> On `cmd.exe` instead of PowerShell, activate with `.\.venv\Scripts\activate.bat`.
+</details>
 
 Drive individual operations:
 

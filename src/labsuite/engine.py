@@ -469,6 +469,14 @@ class ControlPlane:
         return self.scim.reconcile(actor=actor)
 
     # ------------------------------------------------------------------ #
+    # Reporting / CSV export
+    # ------------------------------------------------------------------ #
+    def export_csv(self, kind: str) -> str:
+        """Render a report (``access`` | ``saas`` | ``audit``) as a CSV string."""
+        from labsuite import reports  # local import avoids a module-load cycle
+        return reports.generate(self, kind)
+
+    # ------------------------------------------------------------------ #
     # Access-review campaigns (attestation)
     # ------------------------------------------------------------------ #
     def start_review_campaign(self, name: str = "Access review", *, actor: str = "it-admin") -> dict:

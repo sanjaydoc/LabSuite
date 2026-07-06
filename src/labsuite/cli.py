@@ -310,6 +310,20 @@ def cmd_devices(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_export(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    try:
+        body = cp.export_csv(args.kind)
+    except KeyError as exc:
+        raise SystemExit(str(exc)) from exc
+    if args.out:
+        Path(args.out).write_text(body)
+        print(f"wrote {args.out} ({len(body)} bytes)")
+    else:
+        sys.stdout.write(body)
+    return 0
+
+
 def cmd_readiness(args: argparse.Namespace) -> int:
     cp = _load_or_build(args.state)
     if args.user:
@@ -746,6 +760,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--sweep", action="store_true", help="auto-expire lapsed grants")
     p.add_argument("--actor", help="who is performing the action")
     p.set_defaults(func=cmd_jit)
+
+    p = sub.add_parser("export", help="export a report as CSV (access | saas | audit)")
+    p.add_argument("kind", choices=["access", "saas", "audit"])
+    p.add_argument("--out", help="write to a file instead of stdout")
+    p.set_defaults(func=cmd_export)
 
     p = sub.add_parser("readiness", help="onboarding readiness checklist (day-one ready?)")
     p.add_argument("--user", help="show one hire's full checklist")

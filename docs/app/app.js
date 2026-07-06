@@ -736,6 +736,17 @@ async function detectMode() {
 /* ------------------------------------------------------------------ *
  * Rendering helpers
  * ------------------------------------------------------------------ */
+// Build a CSV string and trigger a browser download (client-side, works offline).
+function csvCell(v) { v = String(v ?? ""); return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; }
+function downloadCsv(filename, header, rows) {
+  const body = [header, ...rows].map((r) => r.map(csvCell).join(",")).join("\n");
+  const url = URL.createObjectURL(new Blob([body], { type: "text/csv" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+  a.remove(); URL.revokeObjectURL(url);
+}
+const _csvBtn = (id) => `<button class="btn btn-sm ghost" id="${id}" style="float:right">⬇ CSV</button>`;
+
 const layerDot = (name) => ({ okta: "okta", ad: "ad", nas: "nas", pve: "pve" }[name] || "");
 const chip = (allowed) => allowed ? '<span class="chip allow">● ALLOW</span>' : '<span class="chip deny">● DENY</span>';
 
@@ -971,6 +982,16 @@ async function doCheck() {
 
 async function renderReview() {
   const r = await backend.review();
+  byId("rv-export").onclick = async () => {
+    const rows = [];
+    for (const u of Object.keys(r.entitlements).sort()) {
+      const a = await backend.resolve(u);
+      rows.push([u, a.active ? "active" : "disabled", a.mfa_enrolled ? "yes" : "no",
+        Object.keys(a.truenas).length, Object.keys(a.proxmox).length,
+        Object.entries(a.truenas).map(([s, l]) => `${s}:${l}`).join("; "), Object.keys(a.blocked || {}).join("; ")]);
+    }
+    downloadCsv("labsuite-access.csv", ["username", "status", "mfa", "shares", "vms", "share_access", "blocked"], rows);
+  };
   byId("rv-flags").innerHTML = r.flags.length
     ? r.flags.map((f) => `<div class="flag"><span class="bang">!</span> ${esc(f)}</div>`).join("")
     : '<div class="chip allow">✓ estate is clean</div>';
@@ -1018,6 +1039,9 @@ async function renderCampaign() {
 
 async function renderAudit() {
   const events = await backend.audit();
+  byId("audit-export").onclick = () => downloadCsv("labsuite-audit.csv",
+    ["ts", "actor", "action", "target", "system", "outcome", "detail"],
+    events.slice().reverse().map((e) => [Math.round(e.ts || 0), e.actor, e.action, e.target, e.system, e.outcome, e.detail || ""]));
   byId("audit-list").innerHTML = events.length ? events.map((e) => `
     <div class="audit-row">
       <span class="sys">${esc(e.system)}</span>
@@ -1081,6 +1105,13 @@ async function renderCompliance() {
 
 async function renderSaas() {
   const data = await backend.saas();
+  byId("saas-export").onclick = () => downloadCsv("labsuite-saas.csv",
+    ["app", "cost_per_seat_monthly", "seats", "monthly_total", "annual_total", "assignees"],
+    data.apps.slice().sort((a, b) => a.name.localeCompare(b.name)).map((a) => {
+      const seats = a.assignees.length;
+      return [a.name, a.monthly_cost_per_seat.toFixed(2), seats, (a.monthly_cost_per_seat * seats).toFixed(2),
+        (a.monthly_cost_per_seat * seats * 12).toFixed(2), a.assignees.slice().sort().join("; ")];
+    }));
   const annual = (data.annual_cost != null) ? data.annual_cost : data.monthly_spend * 12;
   byId("saas-stats").innerHTML = [
     ["$" + Math.round(data.monthly_spend).toLocaleString(), "Monthly spend"],

@@ -22,7 +22,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import Body, Depends, FastAPI, Header, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -158,6 +158,17 @@ def create_app(cp: ControlPlane | None = None) -> FastAPI:
     @app.get("/alerts")
     def alerts() -> dict:
         return control.action_center()
+
+    @app.get("/export/{kind}")
+    def export_csv(kind: str) -> PlainTextResponse:
+        try:
+            body = control.export_csv(kind)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return PlainTextResponse(
+            body, media_type="text/csv",
+            headers={"content-disposition": f'attachment; filename="labsuite-{kind}.csv"'},
+        )
 
     # --------------------------------------------------------------- #
     # Access-review campaigns (attestation)

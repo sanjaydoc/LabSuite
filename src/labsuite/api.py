@@ -137,6 +137,20 @@ def create_app(cp: ControlPlane | None = None) -> FastAPI:
     def devices() -> dict:
         return {"devices": [d.to_dict() for d in control.endpoints.list_devices()]}
 
+    @app.get("/compliance")
+    def compliance() -> dict:
+        return {"records": control.compliance.all_records()}
+
+    @app.post("/compliance/complete")
+    def complete_training(username: str = Body(...), training: str = Body(...)) -> dict:
+        control.complete_training(username, training)
+        return {"username": username, "training": training, "status": "current"}
+
+    @app.post("/compliance/expire")
+    def expire_training(username: str = Body(...), training: str = Body(...)) -> dict:
+        control.expire_training(username, training)
+        return {"username": username, "training": training, "status": "expired"}
+
     # --------------------------------------------------------------- #
     # Web GUI + marketing site
     # --------------------------------------------------------------- #

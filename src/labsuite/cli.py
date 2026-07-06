@@ -106,6 +106,11 @@ def cmd_onboard(args: argparse.Namespace) -> int:
         _header("Device imaged & shipped (day one)")
         print(f"  {d['model']} · image {_c(d['image'], CYAN)} · {img.security_summary()}")
         print(f"  {DIM}asset {d['asset_tag']} · {d['platform']} · MDM {img.mdm}{RESET}")
+    if result.trainings:
+        _header("Compliance (training gates sensitive access)")
+        print(f"  required : {', '.join(result.trainings)} {DIM}(pending){RESET}")
+        for share, missing in sorted(result.gated.items()):
+            print(f"  {_c('gated', RED)} {share:18} until {', '.join(missing)} complete")
     _save(cp, args.state)
     return 0
 
@@ -161,6 +166,13 @@ def cmd_access(args: argparse.Namespace) -> int:
         print(f"  {path:14} {role}")
     if not report.proxmox:
         print(f"  {DIM}(none){RESET}")
+    if report.trainings:
+        _header("Compliance / training")
+        for training, status in sorted(report.trainings.items()):
+            colour = GREEN if status == "current" else RED
+            print(f"  {training:16} {_c(status, colour)}")
+        for share, missing in sorted(report.blocked.items()):
+            print(f"  {_c('BLOCKED', RED)} {share} — needs {', '.join(missing)}")
     return 0
 
 
@@ -192,6 +204,33 @@ def cmd_review(args: argparse.Namespace) -> int:
         print(_c("  none -- estate is clean", GREEN))
     for flag in review["flags"]:
         print(f"  {_c('!', RED)} {flag}")
+    return 0
+
+
+def cmd_train(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    if args.expire:
+        cp.expire_training(args.user, args.training)
+        print(f"{args.training} for {args.user}: {_c('EXPIRED', RED)} — gated access revoked")
+    else:
+        cp.complete_training(args.user, args.training)
+        print(f"{args.training} for {args.user}: {_c('current', GREEN)} — gated access unlocked")
+    _save(cp, args.state)
+    return 0
+
+
+def cmd_compliance(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    _header("Training records")
+    records = cp.compliance.all_records()
+    for user in sorted(records):
+        parts = []
+        for training, status in sorted(records[user].items()):
+            colour = GREEN if status == "current" else RED
+            parts.append(f"{training}:{_c(status, colour)}")
+        print(f"  {user:10} {' '.join(parts)}")
+    if not records:
+        print(f"  {DIM}(no records){RESET}")
     return 0
 
 
@@ -345,6 +384,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("review", help="quarterly access review with anomaly flags").set_defaults(func=cmd_review)
     sub.add_parser("devices", help="list the managed laptop fleet").set_defaults(func=cmd_devices)
+    sub.add_parser("compliance", help="show training records").set_defaults(func=cmd_compliance)
+
+    p = sub.add_parser("train", help="record a training as complete (or --expire it)")
+    p.add_argument("--user", required=True)
+    p.add_argument("--training", required=True)
+    p.add_argument("--expire", action="store_true", help="mark the training lapsed instead of complete")
+    p.set_defaults(func=cmd_train)
+
     sub.add_parser("sync", help="run the SCIM reconcile now").set_defaults(func=cmd_sync)
 
     p = sub.add_parser("audit", help="print the audit trail")

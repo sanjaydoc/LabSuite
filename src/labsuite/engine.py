@@ -31,10 +31,11 @@ from labsuite.adapters.base import (
     StorageProvider,
 )
 from labsuite.audit import AuditLog
+from labsuite.compliance import ComplianceRegistry
 from labsuite.endpoints import DeviceFleet
 from labsuite.models import AccessDecision, AccessLevel, Department, ProxmoxRole
 from labsuite.okta import OktaDirectory
-from labsuite.policy import image_for, onboarding_groups
+from labsuite.policy import image_for, onboarding_groups, required_trainings
 from labsuite.proxmox import Proxmox
 from labsuite.scim import ScimSync, SyncReport
 from labsuite.truenas import TrueNAS
@@ -57,6 +58,8 @@ class OnboardResult:
     truenas_access: dict[str, str] = field(default_factory=dict)
     proxmox_access: dict[int, str] = field(default_factory=dict)
     device: dict | None = None
+    trainings: dict[str, str] = field(default_factory=dict)
+    gated: dict[str, list[str]] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -68,6 +71,8 @@ class OnboardResult:
             "truenas_access": self.truenas_access,
             "proxmox_access": self.proxmox_access,
             "device": self.device,
+            "trainings": self.trainings,
+            "gated": self.gated,
         }
 
 
@@ -104,6 +109,8 @@ class AccessReport:
     ad_effective_groups: list[str]
     truenas: dict[str, str]
     proxmox: dict[str, str]
+    trainings: dict[str, str] = field(default_factory=dict)
+    blocked: dict[str, list[str]] = field(default_factory=dict)  # share -> missing trainings
 
     def to_dict(self) -> dict:
         return {
@@ -113,6 +120,8 @@ class AccessReport:
             "ad_effective_groups": self.ad_effective_groups,
             "truenas": self.truenas,
             "proxmox": self.proxmox,
+            "trainings": self.trainings,
+            "blocked": self.blocked,
         }
 
 
@@ -126,6 +135,7 @@ class ControlPlane:
         truenas: StorageProvider | None = None,
         proxmox: ComputeProvider | None = None,
         endpoints: EndpointProvider | None = None,
+        compliance: ComplianceRegistry | None = None,
         audit: AuditLog | None = None,
     ) -> None:
         # Any of these may be a real-system adapter; the control plane only ever
@@ -135,6 +145,7 @@ class ControlPlane:
         self.truenas: StorageProvider = truenas or TrueNAS()
         self.proxmox: ComputeProvider = proxmox or Proxmox()
         self.endpoints: EndpointProvider = endpoints or DeviceFleet()
+        self.compliance = compliance or ComplianceRegistry()
         self.audit = audit or AuditLog()
         self.scim = ScimSync(self.okta, self.ad, self.audit)
 
@@ -194,6 +205,15 @@ class ControlPlane:
             detail=f"{device.model} · {device.image}",
         )
 
+        # Compliance half: register required trainings (pending), which gates the
+        # sensitive lab shares until they are completed.
+        trainings = required_trainings(role)
+        self.compliance.assign_required(username, trainings)
+        self.audit.record(
+            actor, "training.assign", username, "compliance",
+            detail=f"pending: {', '.join(trainings)}",
+        )
+
         access = self.resolve_access(username)
         return OnboardResult(
             username=username,
@@ -204,6 +224,8 @@ class ControlPlane:
             truenas_access=access.truenas,
             proxmox_access={int(k.split("/")[-1]): v for k, v in access.proxmox.items()},
             device=device.to_dict(),
+            trainings=access.trainings,
+            gated=access.blocked,
         )
 
     # ------------------------------------------------------------------ #
@@ -272,7 +294,19 @@ class ControlPlane:
         user = self.okta.get_user(username)
         active = bool(user and user.active)
         groups = self.ad.effective_groups(username)
-        nas = {name: str(level) for name, level in self.truenas.shares_for(groups).items()}
+
+        # Group membership grants eligibility; gated shares also require current
+        # training. A share the user is eligible for but not cleared for is moved
+        # from granted access to `blocked`, with the trainings still needed.
+        nas: dict[str, str] = {}
+        blocked: dict[str, list[str]] = {}
+        for name, level in self.truenas.shares_for(groups).items():
+            missing = self.compliance.missing_for_share(username, name) if active else []
+            if missing:
+                blocked[name] = missing
+            else:
+                nas[name] = str(level)
+
         pve = {
             self.proxmox.get_vm(vmid).path: str(role)
             for vmid, role in self.proxmox.objects_for(groups).items()
@@ -284,6 +318,8 @@ class ControlPlane:
             ad_effective_groups=sorted(groups),
             truenas=nas,
             proxmox=pve,
+            trainings=self.compliance.trainings_for(username),
+            blocked=blocked,
         )
 
     def check_truenas(self, username: str, share: str, action: str = "read", *, actor: str | None = None) -> AccessDecision:
@@ -292,6 +328,18 @@ class ControlPlane:
         groups = self.ad.effective_groups(username)
         granted, via = self.truenas.level_for(share, groups)
         allowed = granted >= required
+
+        # Compliance gate: even with a sufficient group grant, gated shares need
+        # current training.
+        missing = self.compliance.missing_for_share(username, share)
+        if allowed and missing:
+            allowed = False
+            reason = f"BLOCKED — training not current: {', '.join(missing)}"
+        elif allowed:
+            reason = f"granted via {', '.join(via)}"
+        else:
+            reason = "no group grants sufficient access"
+
         decision = AccessDecision(
             username=username,
             system="truenas",
@@ -301,7 +349,7 @@ class ControlPlane:
             granted=str(granted),
             required=str(required),
             via_groups=via,
-            reason=(f"granted via {', '.join(via)}" if allowed else "no group grants sufficient access"),
+            reason=reason,
         )
         self.audit.record(
             actor or username, "access.check", f"truenas:{share}", "truenas",
@@ -331,13 +379,27 @@ class ControlPlane:
         return decision
 
     # ------------------------------------------------------------------ #
+    # Compliance / training
+    # ------------------------------------------------------------------ #
+    def complete_training(self, username: str, training: str, *, actor: str = "compliance") -> None:
+        """Record a training as completed -- unlocks any access it was gating."""
+        self.compliance.complete(username, training)
+        self.audit.record(actor, "training.complete", username, "compliance", detail=training)
+
+    def expire_training(self, username: str, training: str, *, actor: str = "compliance") -> None:
+        """Mark a training lapsed -- gated access relying on it auto-revokes."""
+        self.compliance.expire(username, training)
+        self.audit.record(actor, "training.expire", username, "compliance", outcome="denied", detail=training)
+
+    # ------------------------------------------------------------------ #
     # Access review
     # ------------------------------------------------------------------ #
     def access_review(self, *, actor: str = "it-admin") -> dict:
         """Quarterly-style review: entitlements per user, plus flagged anomalies."""
         entitlements: dict[str, dict] = {}
         flags: list[str] = []
-        for username, user in self.okta.users.items():
+        for user in self.okta.list_users():
+            username = user.username
             report = self.resolve_access(username)
             entitlements[username] = report.to_dict()
 
@@ -351,6 +413,13 @@ class ControlPlane:
             for path, role in report.proxmox.items():
                 if role == str(ProxmoxRole.PVE_ADMIN):
                     flags.append(f"{username}: PVEAdmin on {path}")
+            # Compliance flags: lapsed training, and access blocked pending training.
+            if user.active:
+                for training, status in report.trainings.items():
+                    if status == "expired":
+                        flags.append(f"{username}: EXPIRED training {training!r}")
+                for share_name, missing in report.blocked.items():
+                    flags.append(f"{username}: blocked from {share_name!r} (needs {', '.join(missing)})")
         self.audit.record(actor, "access.review", "*", "control-plane", detail=f"{len(flags)} flags")
         return {"entitlements": entitlements, "flags": flags}
 
@@ -367,6 +436,7 @@ class ControlPlane:
             "truenas": self.truenas.to_dict(),
             "proxmox": self.proxmox.to_dict(),
             "endpoints": self.endpoints.to_dict(),
+            "compliance": self.compliance.to_dict(),
             "audit": self.audit.to_list(),
         }
 
@@ -380,6 +450,7 @@ class ControlPlane:
             truenas=TrueNAS.from_dict(data["truenas"]),
             proxmox=Proxmox.from_dict(data["proxmox"]),
             endpoints=DeviceFleet.from_dict(data.get("endpoints", {})),
+            compliance=ComplianceRegistry.from_dict(data.get("compliance", {})),
             audit=audit,
         )
         return cp

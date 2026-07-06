@@ -154,3 +154,38 @@ ROLE_IMAGE: dict[str, str] = {
 def image_for(role: str) -> str:
     """The image a role is provisioned with (defaults to the standard Mac build)."""
     return ROLE_IMAGE.get(role, "mac-standard")
+
+
+# --------------------------------------------------------------------------- #
+# Compliance policy: training-gated access.
+#
+# Group membership grants *eligibility*; for gated resources, access is only
+# actually allowed if the required training is CURRENT. This unifies HR/compliance
+# with IT access -- a lab-specific control that generic IdP tooling doesn't model.
+# In a bio lab a scientist can't touch in-vivo study data until their IACUC +
+# biosafety training is recorded and current, and access auto-revokes if it lapses.
+# --------------------------------------------------------------------------- #
+TRAININGS = ["Data-Handling", "Biosafety", "Chemical-Safety", "IACUC"]
+
+# Shares that require *current* training on top of the group ACL.
+GATED_SHARES: dict[str, list[str]] = {
+    "lab-raw-signals": ["Biosafety"],
+    "invivo-study-data": ["IACUC", "Biosafety"],
+}
+
+# Trainings a role must hold. Assigned pending (missing) at onboarding -- a new
+# hire completes them before gated access unlocks.
+ROLE_TRAININGS: dict[str, list[str]] = {
+    "research-scientist": ["Data-Handling", "Biosafety", "IACUC"],
+    "platform-engineer": ["Data-Handling"],
+    "lab-technician": ["Biosafety", "Chemical-Safety"],
+    "operations": ["Data-Handling"],
+    "legal-counsel": ["Data-Handling"],
+    "security-analyst": ["Data-Handling"],
+    "it-admin": ["Data-Handling"],
+}
+
+
+def required_trainings(role: str) -> list[str]:
+    """The trainings a role must hold (defaults to Data-Handling)."""
+    return list(ROLE_TRAININGS.get(role, ["Data-Handling"]))

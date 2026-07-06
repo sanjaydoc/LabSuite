@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from labsuite.engine import ControlPlane
 from labsuite.models import AccessLevel, Department, ProxmoxRole
+from labsuite.policy import required_trainings
 
 DEMO_PASSWORD = "Winter-Harbor-2026"  # noqa: S105 (demo-only shared password)
 
@@ -47,6 +48,12 @@ def _wire_truenas(cp: ControlPlane) -> None:
     nas.grant("lab-raw-signals", "Lab", AccessLevel.MODIFY)
     nas.grant("lab-raw-signals", "Research", AccessLevel.READ)
     nas.grant("lab-raw-signals", "Domain-Admins", AccessLevel.FULL)
+
+    # Gated (IACUC-controlled) in-vivo study data -- access needs current training
+    # on top of the group grant (see policy.GATED_SHARES).
+    nas.add_share("invivo-study-data", "tank/invivo", "In-vivo study data (IACUC-controlled)", sensitive=True)
+    nas.grant("invivo-study-data", "Research", AccessLevel.MODIFY)
+    nas.grant("invivo-study-data", "Domain-Admins", AccessLevel.FULL)
 
     nas.add_share("platform-artifacts", "tank/platform", "Build artifacts and images")
     nas.grant("platform-artifacts", "Platform", AccessLevel.MODIFY)
@@ -97,5 +104,10 @@ def build_lab() -> ControlPlane:
     for display_name, department, role, title in SEED_PEOPLE:
         result = cp.onboard(display_name, department, role, title=title)
         cp.okta.set_password(result.username, DEMO_PASSWORD)
+        # Established employees have already completed their required training, so
+        # their gated access is live. A *fresh* onboard starts pending -- which is
+        # what demonstrates compliance-gated access.
+        for training in required_trainings(role):
+            cp.complete_training(result.username, training, actor="system")
 
     return cp

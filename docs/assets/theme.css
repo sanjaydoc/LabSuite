@@ -1,0 +1,163 @@
+/* LabSuite design system -- modelled on the Merge Labs aesthetic:
+   light, monochrome, editorial. Elegant serif display + humanist sans body,
+   thin dark full-width rules, black pill buttons, white cards with soft shadow
+   and hairline dividers, generous whitespace. */
+
+:root {
+  --paper: #ffffff;
+  --paper-2: #fafafa;
+  --ink: #0d0d0f;      /* near-black display + primary text */
+  --ink-2: #33333b;    /* dark slate for card body copy */
+  --muted: #6f6f78;    /* small grey labels */
+  --faint: #9a9aa2;
+  --hair: #e7e7ea;     /* light hairline dividers inside cards */
+  --rule: #111114;     /* the signature strong dark full-width rule */
+
+  --accent: #0d0d0f;   /* actions are black, like Merge */
+  --ok: #157050;       /* muted green (ALLOW) */
+  --ok-bg: #e8f2ec;
+  --no: #a5342f;       /* muted red (DENY) */
+  --no-bg: #f6ebe9;
+
+  /* small layer-accent dots for wayfinding (kept subtle) */
+  --okta: #635bff;
+  --ad: #2f6fed;
+  --nas: #0e9f6e;
+  --pve: #d98218;
+
+  --shadow-sm: 0 1px 2px rgba(16, 16, 20, .05);
+  --shadow: 0 1px 2px rgba(16, 16, 20, .04), 0 10px 34px rgba(16, 16, 20, .07);
+  --radius: 16px;
+  --radius-sm: 10px;
+  --pill: 999px;
+  --maxw: 1080px;
+
+  --serif: "Newsreader", Georgia, "Times New Roman", serif;
+  --sans: "Hanken Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a { color: var(--ink); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+h1, h2, h3 { font-family: var(--serif); font-weight: 500; letter-spacing: -0.01em; line-height: 1.1; margin: 0; }
+h1 { font-size: clamp(2.6rem, 6vw, 4.4rem); }
+h2 { font-size: clamp(1.8rem, 4vw, 2.8rem); }
+h3 { font-size: 1.35rem; }
+
+p { margin: 0 0 1rem; color: var(--ink-2); }
+
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+/* --- the signature dark rule ------------------------------------------- */
+.rule { border: 0; border-top: 1.5px solid var(--rule); margin: 0; }
+.section { padding: 64px 0; }
+.section + .section { border-top: 1.5px solid var(--rule); }
+
+/* --- small grey label (Merge "Location / Employment Type" style) -------- */
+.label {
+  font-size: .74rem;
+  color: var(--muted);
+  letter-spacing: .01em;
+  text-transform: none;
+  margin-bottom: .25rem;
+}
+.eyebrow {
+  font-size: .8rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* --- buttons: black pill with arrow ------------------------------------ */
+.btn {
+  display: inline-flex; align-items: center; gap: .5rem;
+  background: var(--ink); color: #fff;
+  font-family: var(--sans); font-weight: 700; font-size: .95rem;
+  padding: .72rem 1.15rem; border: 0; border-radius: 12px; cursor: pointer;
+  transition: transform .12s ease, opacity .12s ease;
+}
+.btn:hover { opacity: .88; text-decoration: none; transform: translateY(-1px); }
+.btn.ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--ink); }
+.btn.ghost:hover { background: var(--ink); color: #fff; }
+.btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+.btn-sm { padding: .5rem .85rem; font-size: .85rem; border-radius: 10px; }
+
+/* --- cards ------------------------------------------------------------- */
+.card {
+  background: var(--paper);
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 22px;
+}
+.card .divider { border: 0; border-top: 1px solid var(--hair); margin: 14px 0; }
+
+/* --- chips / status ---------------------------------------------------- */
+.chip {
+  display: inline-flex; align-items: center; gap: .4rem;
+  font-size: .78rem; font-weight: 600;
+  padding: .2rem .6rem; border-radius: var(--pill);
+  border: 1px solid var(--hair); color: var(--ink-2); background: var(--paper-2);
+}
+.chip.allow { color: var(--ok); background: var(--ok-bg); border-color: #cfe6da; }
+.chip.deny { color: var(--no); background: var(--no-bg); border-color: #ecd4d1; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.dot.okta { background: var(--okta); }
+.dot.ad { background: var(--ad); }
+.dot.nas { background: var(--nas); }
+.dot.pve { background: var(--pve); }
+
+/* --- code -------------------------------------------------------------- */
+code, pre, .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+pre {
+  background: #0d0d0f; color: #f4f4f5;
+  border-radius: var(--radius-sm); padding: 16px 18px; overflow-x: auto;
+  font-size: .85rem; line-height: 1.55;
+}
+:not(pre) > code {
+  background: var(--paper-2); border: 1px solid var(--hair);
+  border-radius: 6px; padding: .1rem .35rem; font-size: .85em;
+}
+
+/* --- nav --------------------------------------------------------------- */
+.nav {
+  position: sticky; top: 0; z-index: 20;
+  background: rgba(255, 255, 255, .82);
+  backdrop-filter: saturate(140%) blur(10px);
+  border-bottom: 1.5px solid var(--rule);
+}
+.nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+.brand { display: flex; align-items: center; gap: .55rem; font-weight: 800; font-size: 1.15rem; letter-spacing: -.02em; }
+.brand svg { width: 26px; height: 26px; }
+.nav-links { display: flex; align-items: center; gap: 1.4rem; }
+.nav-links a { font-size: .92rem; color: var(--ink-2); font-weight: 500; }
+.nav-links a:hover { color: var(--ink); }
+
+/* --- tables ------------------------------------------------------------ */
+table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+th, td { text-align: left; padding: .6rem .5rem; border-bottom: 1px solid var(--hair); }
+th { color: var(--muted); font-weight: 600; font-size: .78rem; }
+
+.muted { color: var(--muted); }
+.center { text-align: center; }
+
+@media (max-width: 720px) {
+  .nav-links a:not(.btn) { display: none; }
+  .section { padding: 44px 0; }
+}

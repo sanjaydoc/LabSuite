@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LabSuite — identity-to-infrastructure access governance</title>
+  <meta name="description" content="A from-scratch control plane for the lab's identity stack: Okta to Active Directory to TrueNAS + Proxmox. Onboard, offboard, sync, and decide access — all audited." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/theme.css" />
+  <style>
+    .hero { padding: 84px 0 64px; }
+    .hero h1 { max-width: 16ch; }
+    .hero .lead { font-size: 1.2rem; max-width: 56ch; margin-top: 1.2rem; }
+    .cta-row { display: flex; gap: .8rem; margin-top: 2rem; flex-wrap: wrap; }
+    .stack-meta { display: flex; gap: 1.3rem; margin-top: 2.4rem; flex-wrap: wrap; color: var(--muted); font-size: .9rem; }
+    .stack-meta span { display: inline-flex; align-items: center; gap: .5rem; }
+
+    .flow { display: grid; gap: 14px; max-width: 640px; margin: 8px auto 0; }
+    .flow .node { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start;
+      border: 1px solid var(--hair); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-sm); background: var(--paper); }
+    .flow .node .idx { font-family: var(--serif); font-size: 1.4rem; color: var(--ink); width: 34px; height: 34px; display: grid; place-items: center; border: 1.5px solid var(--rule); border-radius: 50%; }
+    .flow .node h3 { font-family: var(--sans); font-weight: 700; font-size: 1rem; display: flex; align-items: center; gap: .5rem; }
+    .flow .node p { margin: .25rem 0 0; font-size: .88rem; }
+    .flow .arrow { text-align: center; color: var(--faint); font-size: 1.1rem; line-height: 1; }
+    .flow .split { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 560px) { .flow .split { grid-template-columns: 1fr; } }
+
+    .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    @media (max-width: 860px) { .features { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 560px) { .features { grid-template-columns: 1fr; } }
+    .feature h3 { font-family: var(--sans); font-weight: 700; font-size: 1.05rem; margin-bottom: .4rem; }
+    .feature p { font-size: .9rem; margin: 0; }
+
+    .maprow { display: grid; grid-template-columns: 1.1fr 1.2fr .9fr; gap: 0; }
+    .footer { padding: 40px 0 64px; color: var(--muted); font-size: .88rem; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+  </style>
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="wrap">
+      <a class="brand" href="./">
+        <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <circle cx="10" cy="16" r="6.2" stroke="currentColor" stroke-width="2.4"/>
+          <rect x="17.5" y="9.8" width="12.2" height="12.4" rx="3.4" stroke="currentColor" stroke-width="2.4"/>
+          <path d="M14.6 16h4.2" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+        </svg>
+        labsuite
+      </a>
+      <div class="nav-links">
+        <a href="#stack">Architecture</a>
+        <a href="#quickstart">Quickstart</a>
+        <a href="app/">Live demo</a>
+        <a class="btn btn-sm" href="https://github.com/sanjaydoc/LabSuite">GitHub ↗</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="wrap">
+      <div class="eyebrow">Identity &amp; access governance</div>
+      <h1>The lab's identity stack, operated end&#8209;to&#8209;end.</h1>
+      <p class="lead">A from-scratch control plane that provisions a hire from <strong>Okta</strong> through <strong>Active Directory</strong> down to <strong>TrueNAS</strong> and <strong>Proxmox</strong>, deprovisions same-day and proves it, and resolves every allow/deny decision along the chain — all audited.</p>
+      <div class="cta-row">
+        <a class="btn" href="app/">Open the live demo →</a>
+        <a class="btn ghost" href="https://github.com/sanjaydoc/LabSuite">View on GitHub ↗</a>
+      </div>
+      <div class="stack-meta">
+        <span><i class="dot okta"></i> Okta</span>
+        <span><i class="dot ad"></i> Active Directory</span>
+        <span><i class="dot nas"></i> TrueNAS</span>
+        <span><i class="dot pve"></i> Proxmox</span>
+        <span>· pure-Python core · zero deps · 43 tests</span>
+      </div>
+    </div>
+  </header>
+
+  <section class="section" id="stack">
+    <div class="wrap">
+      <div class="eyebrow">The stack</div>
+      <h2>Identity flows down. Decisions resolve back up.</h2>
+      <p style="max-width:60ch">A hire created in Okta is pushed into AD by an idempotent SCIM sync; their group membership decides their ACLs on storage and compute. To decide "can she start VM 101?", LabSuite resolves her effective AD groups — following nested groups — and checks the Proxmox ACL on that VM's path.</p>
+
+      <div class="flow">
+        <div class="node">
+          <div class="idx">1</div>
+          <div>
+            <h3><i class="dot okta"></i> Okta — identity / login</h3>
+            <p>Source of truth for users and group membership. Authenticates and issues a signed session token.</p>
+          </div>
+        </div>
+        <div class="arrow">↓ &nbsp;<span class="muted" style="font-size:.8rem">provisioned via SCIM (idempotent)</span></div>
+        <div class="node">
+          <div class="idx">2</div>
+          <div>
+            <h3><i class="dot ad"></i> Active Directory — users / groups / permissions</h3>
+            <p>Synced from Okta. Owns the permission structure — including <strong>nested groups</strong> resolved by transitive closure.</p>
+          </div>
+        </div>
+        <div class="arrow">↓ &nbsp;<span class="muted" style="font-size:.8rem">effective groups drive every ACL</span></div>
+        <div class="split">
+          <div class="node">
+            <div class="idx" style="font-size:1rem">3a</div>
+            <div>
+              <h3><i class="dot nas"></i> TrueNAS</h3>
+              <p>Shares whose ACLs map an AD group to read / modify / full.</p>
+            </div>
+          </div>
+          <div class="node">
+            <div class="idx" style="font-size:1rem">3b</div>
+            <div>
+              <h3><i class="dot pve"></i> Proxmox</h3>
+              <p>VMs with hierarchical <code>(path, group) → role</code> ACLs.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="features">
+    <div class="wrap">
+      <div class="eyebrow">What it does</div>
+      <h2 style="margin-bottom:2rem">Not a script — a control plane.</h2>
+      <div class="features">
+        <div class="card feature"><h3>Onboard end-to-end</h3><p>One call creates the hire in Okta, assigns role/department groups by policy, syncs to AD, and reports the exact TrueNAS + Proxmox access they now have.</p></div>
+        <div class="card feature"><h3>Offboard, verified</h3><p>Same-day deprovision across the whole chain — and it <em>proves</em> zero residual access before returning.</p></div>
+        <div class="card feature"><h3>Idempotent SCIM sync</h3><p>Okta → AD reconcile with create / update / deactivate. Run it twice; the second run is a provable no-op.</p></div>
+        <div class="card feature"><h3>Nested-group resolution</h3><p>A researcher gets GPU access because <code>Research</code> is nested in <code>GPU-Cluster-Users</code> — inherited, not hand-granted.</p></div>
+        <div class="card feature"><h3>Audited allow/deny</h3><p>Every decision records the exact groups that granted it. Nothing happens off the record.</p></div>
+        <div class="card feature"><h3>Access reviews</h3><p>A quarterly-style report flags stale access, FULL on sensitive shares, and datacenter-wide admin.</p></div>
+        <div class="card feature"><h3>Swappable adapters</h3><p>Each layer sits behind an interface. Drop in the real Okta / AD / TrueNAS / Proxmox APIs without touching the control plane.</p></div>
+        <div class="card feature"><h3>Zero-dependency core</h3><p>Pure Python. Runs anywhere, in CI, on 3.10–3.12. FastAPI only for the optional live API.</p></div>
+        <div class="card feature"><h3>CLI + HTTP API + GUI</h3><p>Drive it from the terminal, an OIDC-ish HTTP API with a SCIM feed, or this web dashboard.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="quickstart">
+    <div class="wrap">
+      <div class="eyebrow">Quickstart</div>
+      <h2 style="margin-bottom:1.4rem">See it work in 30 seconds.</h2>
+      <pre><code># Python 3.10+; the core needs no third-party packages.
+python3 -m venv .venv &amp;&amp; source .venv/bin/activate
+pip install -e .          # add ".[api]" for the live API + GUI
+
+labsuite demo             # the whole story, end to end
+
+labsuite onboard --name "Nadia Rahman" --department Research --role research-scientist
+labsuite access  --user nrahman
+labsuite check   --user nrahman --system proxmox --resource 101 --action vm.power
+labsuite offboard --user nrahman      # same-day, verified clean
+labsuite review                       # access review + flags</code></pre>
+      <p style="margin-top:1.2rem"><a class="btn" href="app/">Prefer to click? Open the live demo →</a></p>
+    </div>
+  </section>
+
+  <section class="section" id="mapping">
+    <div class="wrap">
+      <div class="eyebrow">Honest by design</div>
+      <h2 style="margin-bottom:1.4rem">How it maps to the real stack.</h2>
+      <p style="max-width:60ch">LabSuite is a faithful reference implementation — a simulator of the stack and the processes around it, shaped so each layer can be swapped for the real product's API.</p>
+      <div class="card" style="padding:0; overflow:hidden">
+        <table>
+          <tr><th>LabSuite</th><th>Real system</th><th>Swap point</th></tr>
+          <tr><td>Okta directory + session token</td><td>Okta OIDC / <code>/api/v1</code> + SCIM</td><td>OktaApiIdentityProvider</td></tr>
+          <tr><td>AD nested groups</td><td>AD + <code>LDAP_MATCHING_RULE_IN_CHAIN</code></td><td>LdapDirectoryProvider</td></tr>
+          <tr><td>TrueNAS share ACLs</td><td>TrueNAS <code>/api/v2.0</code></td><td>TrueNasApiStorageProvider</td></tr>
+          <tr><td>Proxmox path ACLs</td><td>PVE <code>/api2/json/access/acl</code></td><td>ProxmoxApiComputeProvider</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <hr class="rule" />
+  <footer class="wrap footer">
+    <div>LabSuite — an independent portfolio project. MIT licensed.</div>
+    <div><a href="https://github.com/sanjaydoc/LabSuite">github.com/sanjaydoc/LabSuite</a></div>
+  </footer>
+
+</body>
+</html>

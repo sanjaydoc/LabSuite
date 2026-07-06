@@ -1,0 +1,490 @@
+/* LabSuite operational dashboard — vanilla JS, no build step.
+ *
+ * Runs in two modes:
+ *   • DEMO (default, e.g. on GitHub Pages): an in-browser engine mirrors the
+ *     Python control plane using the generated data.js snapshot, so onboarding,
+ *     offboarding, access resolution and reviews all work with no backend.
+ *   • LIVE: if a LabSuite FastAPI server is reachable at the same origin, the
+ *     UI calls the real /oauth/token, /admin/*, /access, /review endpoints.
+ */
+"use strict";
+
+const D = window.LABSUITE_DATA;
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const $ = (sel, root = document) => root.querySelector(sel);
+const byId = (id) => document.getElementById(id);
+
+const ADJ = "brave calm clever bright quick warm keen bold".split(" ");
+const NOUN = "otter falcon cedar delta harbor quartz meadow signal".split(" ");
+const passphrase = () => `${ADJ[(Math.random() * ADJ.length) | 0]}-${NOUN[(Math.random() * NOUN.length) | 0]}-${1000 + ((Math.random() * 9000) | 0)}`;
+
+/* ------------------------------------------------------------------ *
+ * The in-browser engine — a faithful mirror of labsuite.engine
+ * ------------------------------------------------------------------ */
+class DemoEngine {
+  constructor(data) {
+    this.d = data;
+    this.users = {};
+    for (const u of data.users) this.users[u.username] = { ...u, okta_groups: [...u.okta_groups] };
+    this.audit = [];
+    // child -> [parents] from ad_nesting (parent -> [children])
+    this.parentsOf = {};
+    for (const parent in data.ad_nesting)
+      for (const child of data.ad_nesting[parent]) (this.parentsOf[child] ||= []).push(parent);
+  }
+
+  log(system, action, target, outcome = "success", detail = "") {
+    this.audit.push({ system, action, target, outcome, detail });
+  }
+
+  effectiveGroups(user) {
+    if (!user || !user.active) return new Set();
+    const eff = new Set(user.okta_groups);
+    const frontier = [...eff];
+    while (frontier.length) {
+      const cur = frontier.pop();
+      for (const p of this.parentsOf[cur] || []) if (!eff.has(p)) { eff.add(p); frontier.push(p); }
+    }
+    return eff;
+  }
+
+  truenasLevel(share, groups) {
+    const acl = this.d.shares[share].acl;
+    let best = 0, via = [];
+    for (const g in acl) if (groups.has(g)) { via.push(g); if (acl[g] > best) best = acl[g]; }
+    via = best > 0 ? via.filter((g) => acl[g] === best).sort() : [];
+    return { level: best, name: this.d.access_levels[best], via };
+  }
+
+  proxmoxRole(vmid, groups) {
+    const vm = this.d.vms[String(vmid)];
+    const paths = ["/", vm.path];
+    if (vm.pool) paths.push("/pool/" + vm.pool);
+    let best = 0, via = [];
+    for (const ace of this.d.proxmox_acl) {
+      if (paths.includes(ace.path) && groups.has(ace.group)) {
+        if (ace.role > best) { best = ace.role; via = [ace.group]; }
+        else if (ace.role === best && best > 0) via.push(ace.group);
+      }
+    }
+    return { role: best, name: this.d.proxmox_roles[best], via: [...new Set(via)].sort() };
+  }
+
+  resolveAccess(username) {
+    const u = this.users[username];
+    const groups = this.effectiveGroups(u);
+    const truenas = {}, proxmox = {};
+    for (const s in this.d.shares) { const r = this.truenasLevel(s, groups); if (r.level > 0) truenas[s] = r.name; }
+    for (const vmid in this.d.vms) { const r = this.proxmoxRole(vmid, groups); if (r.role > 0) proxmox[this.d.vms[vmid].path] = r.name; }
+    const direct = new Set(u ? u.okta_groups : []);
+    const nested = [...groups].filter((g) => !direct.has(g));
+    return {
+      username, active: !!(u && u.active),
+      okta_groups: u ? [...u.okta_groups].sort() : [],
+      ad_effective_groups: [...groups].sort(), nested,
+      truenas, proxmox,
+    };
+  }
+
+  onboardingGroups(dept, role) {
+    const g = [this.d.baseline_group, this.d.department_group[dept], ...this.d.role_blueprints[role].extra_groups];
+    return [...new Set(g)];
+  }
+
+  uniqueUsername(name) {
+    const parts = name.trim().toLowerCase().split(/\s+/);
+    let base = parts.length >= 2 ? parts[0][0] + parts[parts.length - 1] : (parts[0] || "user");
+    base = base.replace(/[^a-z0-9]/g, "");
+    let u = base, n = 1;
+    while (this.users[u]) u = base + ++n;
+    return u;
+  }
+
+  onboard(name, dept, role) {
+    const username = this.uniqueUsername(name);
+    const email = `${username}@lab.local`;
+    const groups = this.onboardingGroups(dept, role);
+    this.users[username] = { username, display_name: name, email, department: dept, title: role, active: true, okta_groups: groups };
+    this.log("okta", "user.create", username, "success", `role=${role}`);
+    this.log("ad", "user.provision", username, "success", "SCIM create");
+    const access = this.resolveAccess(username);
+    const proxmox = {};
+    for (const vmid in this.d.vms) { const p = this.d.vms[vmid].path; if (access.proxmox[p]) proxmox[vmid] = access.proxmox[p]; }
+    return { username, email, temp_password: passphrase(), okta_groups: groups, truenas: access.truenas, proxmox };
+  }
+
+  offboard(username) {
+    const u = this.users[username];
+    const removed = [...u.okta_groups];
+    u.okta_groups = []; u.active = false;
+    this.log("okta", "user.deactivate", username, "success", "offboard");
+    this.log("ad", "user.deactivate", username, "success", "SCIM deactivate");
+    const a = this.resolveAccess(username);
+    const clean = Object.keys(a.truenas).length === 0 && Object.keys(a.proxmox).length === 0;
+    this.log("control-plane", "offboard.verify", username, clean ? "success" : "error", clean ? "zero residual" : "RESIDUAL");
+    return { username, removed_groups: removed, clean, residual_truenas: a.truenas, residual_proxmox: a.proxmox };
+  }
+
+  checkTruenas(username, share, action) {
+    const required = { read: 1, modify: 2, full: 3 }[action];
+    const groups = this.effectiveGroups(this.users[username]);
+    const r = this.truenasLevel(share, groups);
+    const allowed = r.level >= required;
+    this.log(username, "access.check", `truenas:${share}`, allowed ? "success" : "denied", `${action} -> ${r.name}`);
+    return { allowed, granted: r.name, required: this.d.access_levels[required], via: r.via,
+      reason: allowed ? `granted via ${r.via.join(", ")}` : "no group grants sufficient access" };
+  }
+
+  checkProxmox(username, vmid, priv) {
+    const required = this.d.proxmox_privileges[priv];
+    const groups = this.effectiveGroups(this.users[username]);
+    const r = this.proxmoxRole(vmid, groups);
+    const allowed = r.role >= required;
+    this.log(username, "access.check", `proxmox:/vms/${vmid}`, allowed ? "success" : "denied", `${priv} -> ${r.name}`);
+    return { allowed, granted: r.name, required: this.d.proxmox_roles[required], via: r.via,
+      reason: allowed ? `role ${r.name} via ${r.via.join(", ")}` : `role ${r.name} < required ${this.d.proxmox_roles[required]}` };
+  }
+
+  review() {
+    const entitlements = {}, flags = [];
+    for (const username in this.users) {
+      const a = this.resolveAccess(username);
+      entitlements[username] = { active: a.active, truenas: a.truenas, proxmox: a.proxmox };
+      if (!this.users[username].active && (Object.keys(a.truenas).length || Object.keys(a.proxmox).length))
+        flags.push(`${username}: INACTIVE but still has downstream access`);
+      for (const s in a.truenas) if (this.d.shares[s].sensitive && a.truenas[s] === "full")
+        flags.push(`${username}: FULL access to sensitive share '${s}'`);
+      for (const p in a.proxmox) if (a.proxmox[p] === "PVEAdmin") flags.push(`${username}: PVEAdmin on ${p}`);
+    }
+    return { entitlements, flags };
+  }
+
+  login(username, password) {
+    const u = this.users[username];
+    if (!u || !u.active || password !== this.d.demo_password) {
+      this.log("okta", "auth.login", username, "denied");
+      return { ok: false };
+    }
+    this.log("okta", "auth.login", username, "success");
+    const claims = { sub: username, name: u.display_name, groups: [...u.okta_groups].sort() };
+    const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, "");
+    const token = `${b64({ alg: "HS256", typ: "JWT" })}.${b64({ ...claims, exp: 0 })}.demo-signature`;
+    return { ok: true, token, claims };
+  }
+
+  directory() {
+    return Object.values(this.users).map((u) => {
+      const a = this.resolveAccess(u.username);
+      return { username: u.username, display_name: u.display_name, department: u.department, active: u.active,
+        shares: Object.keys(a.truenas).length, vms: Object.keys(a.proxmox).length };
+    }).sort((x, y) => x.username.localeCompare(y.username));
+  }
+
+  stats() {
+    const users = Object.values(this.users);
+    const groups = new Set();
+    for (const u of users) for (const g of u.okta_groups) groups.add(g);
+    return { users: users.length, active: users.filter((u) => u.active).length,
+      groups: groups.size, shares: Object.keys(this.d.shares).length, vms: Object.keys(this.d.vms).length };
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Backend abstraction — demo (in-browser) or live (FastAPI)
+ * ------------------------------------------------------------------ */
+const engine = new DemoEngine(D);
+
+const demoBackend = {
+  mode: "demo",
+  async stats() { return engine.stats(); },
+  async directory() { return engine.directory(); },
+  async resolve(u) { return engine.resolveAccess(u); },
+  async onboard(name, dept, role) { return engine.onboard(name, dept, role); },
+  async offboard(u) { return engine.offboard(u); },
+  async checkTruenas(u, s, a) { return engine.checkTruenas(u, s, a); },
+  async checkProxmox(u, v, p) { return engine.checkProxmox(u, v, p); },
+  async review() { return engine.review(); },
+  async login(u, p) { return engine.login(u, p); },
+  async audit() { return engine.audit.slice().reverse(); },
+  usernames() { return Object.keys(engine.users).sort(); },
+};
+
+const liveBackend = {
+  mode: "live",
+  async _json(url, opts) { const r = await fetch(url, opts); if (!r.ok) throw new Error(r.status); return r.json(); },
+  async stats() {
+    const users = (await this._json("/scim/v2/Users")).Resources;
+    return { users: users.length, active: users.filter((u) => u.active).length, groups: 0,
+      shares: Object.keys(D.shares).length, vms: Object.keys(D.vms).length };
+  },
+  async directory() {
+    const users = (await this._json("/scim/v2/Users")).Resources;
+    const out = [];
+    for (const u of users) {
+      const a = await this._json(`/access/${u.userName}`);
+      out.push({ username: u.userName, display_name: u.displayName, department: u.department, active: u.active,
+        shares: Object.keys(a.truenas).length, vms: Object.keys(a.proxmox).length });
+    }
+    return out.sort((x, y) => x.username.localeCompare(y.username));
+  },
+  async resolve(u) { return this._json(`/access/${u}`); },
+  async onboard(name, dept, role) {
+    const r = await this._json("/admin/onboard", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, department: dept, role }) });
+    return { username: r.username, email: r.email, temp_password: r.temp_password, okta_groups: r.okta_groups, truenas: r.truenas_access, proxmox: r.proxmox_access };
+  },
+  async offboard(u) {
+    const r = await this._json("/admin/offboard", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: u }) });
+    return { username: u, removed_groups: r.removed_groups, clean: r.clean, residual_truenas: r.residual_truenas, residual_proxmox: r.residual_proxmox };
+  },
+  async checkTruenas() { throw new Error("live check via explorer resolve"); },
+  async checkProxmox() { throw new Error("live check via explorer resolve"); },
+  async review() { return this._json("/review"); },
+  async login(u, p) {
+    try { const r = await this._json("/oauth/token", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: u, password: p }) });
+      const claims = JSON.parse(atob(r.access_token.split(".")[1])); return { ok: true, token: r.access_token, claims };
+    } catch { return { ok: false }; }
+  },
+  async audit() { return []; },
+  usernames() { return Object.keys(engine.users).sort(); },
+};
+
+let backend = demoBackend;
+
+async function detectMode() {
+  try {
+    const r = await fetch("/scim/v2/Users", { method: "GET" });
+    if (r.ok) { backend = liveBackend; }
+  } catch { /* stay in demo mode */ }
+  const badge = byId("mode");
+  badge.textContent = backend.mode === "live" ? "live · FastAPI" : "demo mode";
+  badge.className = "modebadge " + (backend.mode === "live" ? "live" : "demo");
+  byId("mode-note").textContent = backend.mode === "live"
+    ? "Connected to a live LabSuite API."
+    : "Running entirely in your browser — a faithful mirror of the Python engine.";
+}
+
+/* ------------------------------------------------------------------ *
+ * Rendering helpers
+ * ------------------------------------------------------------------ */
+const layerDot = (name) => ({ okta: "okta", ad: "ad", nas: "nas", pve: "pve" }[name] || "");
+const chip = (allowed) => allowed ? '<span class="chip allow">● ALLOW</span>' : '<span class="chip deny">● DENY</span>';
+
+function accessTables(a) {
+  const nasRows = Object.keys(a.truenas).sort().map((s) => `<tr><td><i class="dot nas"></i> ${esc(s)}</td><td><span class="tag">${esc(a.truenas[s])}</span></td></tr>`).join("") || `<tr><td class="muted" colspan="2">no share access</td></tr>`;
+  const pveRows = Object.keys(a.proxmox).sort().map((p) => `<tr><td><i class="dot pve"></i> ${esc(p)}</td><td><span class="tag">${esc(a.proxmox[p])}</span></td></tr>`).join("") || `<tr><td class="muted" colspan="2">no VM access</td></tr>`;
+  return `
+    <div class="grid2" style="margin-top:14px">
+      <div><div class="label">TrueNAS</div><table>${nasRows}</table></div>
+      <div><div class="label">Proxmox</div><table>${pveRows}</table></div>
+    </div>`;
+}
+
+function groupTags(a) {
+  const direct = new Set(a.okta_groups);
+  return a.ad_effective_groups.map((g) => direct.has(g)
+    ? `<span class="tag">${esc(g)}</span>`
+    : `<span class="tag nested" title="inherited via AD nesting">${esc(g)} ⤴</span>`).join(" ");
+}
+
+/* ------------------------------------------------------------------ *
+ * Views
+ * ------------------------------------------------------------------ */
+async function renderOverview() {
+  const s = await backend.stats();
+  byId("ov-stats").innerHTML = [
+    ["Identities", s.users], ["Active", s.active], ["TrueNAS shares", s.shares], ["Proxmox VMs", s.vms],
+  ].map(([l, n]) => `<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+}
+
+async function renderDirectory() {
+  const rows = await backend.directory();
+  byId("dir-table").innerHTML =
+    `<tr><th>User</th><th>Name</th><th>Department</th><th>Status</th><th>Shares</th><th>VMs</th></tr>` +
+    rows.map((u) => `<tr>
+      <td><span class="linkish" data-user="${esc(u.username)}">${esc(u.username)}</span></td>
+      <td>${esc(u.display_name)}</td><td>${esc(u.department)}</td>
+      <td>${u.active ? '<span class="chip allow">active</span>' : '<span class="chip deny">disabled</span>'}</td>
+      <td>${u.shares}</td><td>${u.vms}</td></tr>`).join("");
+  $$("#dir-table [data-user]").forEach((el) => el.onclick = () => { byId("ex-user").value = el.dataset.user; go("explorer"); });
+}
+
+function fillRoleSelect() {
+  byId("ob-dept").innerHTML = D.departments.map((d) => `<option>${d}</option>`).join("");
+  byId("ob-role").innerHTML = Object.keys(D.role_blueprints).map((r) => `<option>${r}</option>`).join("");
+  const upd = () => byId("ob-roledesc").textContent = D.role_blueprints[byId("ob-role").value].description;
+  byId("ob-role").onchange = upd; upd();
+}
+
+async function doOnboard() {
+  const name = byId("ob-name").value.trim();
+  if (!name) return;
+  const r = await backend.onboard(name, byId("ob-dept").value, byId("ob-role").value);
+  const nas = Object.keys(r.truenas).sort().map((s) => `<tr><td><i class="dot nas"></i> ${esc(s)}</td><td><span class="tag">${esc(r.truenas[s])}</span></td></tr>`).join("") || `<tr><td class="muted" colspan="2">none</td></tr>`;
+  const pve = Object.keys(r.proxmox).sort().map((v) => `<tr><td><i class="dot pve"></i> /vms/${esc(v)} (${esc(D.vms[v].name)})</td><td><span class="tag">${esc(r.proxmox[v])}</span></td></tr>`).join("") || `<tr><td class="muted" colspan="2">none</td></tr>`;
+  byId("ob-result").innerHTML = `
+    <div class="label">Provisioned</div>
+    <div class="kv" style="margin:.3rem 0 1rem">
+      <span class="k">username</span><b>${esc(r.username)}</b>
+      <span class="k">email</span><span>${esc(r.email)}</span>
+      <span class="k">temp password</span><span class="mono">${esc(r.temp_password)}</span>
+      <span class="k">Okta groups</span><span class="tags">${r.okta_groups.map((g) => `<span class="tag">${esc(g)}</span>`).join("")}</span>
+    </div>
+    <div class="grid2"><div><div class="label">TrueNAS</div><table>${nas}</table></div><div><div class="label">Proxmox</div><table>${pve}</table></div></div>`;
+  refreshUserSelects();
+}
+
+async function doOffboard() {
+  const u = byId("off-user").value;
+  const r = await backend.offboard(u);
+  byId("off-result").innerHTML = `
+    <div class="label">Result for ${esc(u)}</div>
+    <div class="kv" style="margin:.3rem 0 1rem">
+      <span class="k">removed from</span><span class="tags">${(r.removed_groups.length ? r.removed_groups : ["(none)"]).map((g) => `<span class="tag">${esc(g)}</span>`).join("")}</span>
+    </div>
+    <div style="font-size:1.05rem">${r.clean
+      ? '<span class="chip allow">✓ CLEAN — zero residual access</span>'
+      : '<span class="chip deny">✗ RESIDUAL ACCESS REMAINS</span>'}</div>
+    ${r.clean ? '<p class="muted" style="margin:.8rem 0 0;font-size:.88rem">Re-resolved across TrueNAS + Proxmox after deprovisioning — nothing remains.</p>'
+      : `<pre>${esc(JSON.stringify({ truenas: r.residual_truenas, proxmox: r.residual_proxmox }, null, 2))}</pre>`}`;
+  refreshUserSelects();
+}
+
+async function renderExplorer() {
+  const u = byId("ex-user").value;
+  if (!u) return;
+  const a = await backend.resolve(u);
+  byId("ex-report").innerHTML = `
+    <div class="card">
+      <div class="kv">
+        <span class="k">status</span><span>${a.active ? '<span class="chip allow">active</span>' : '<span class="chip deny">disabled</span>'}</span>
+        <span class="k">Okta groups</span><span class="tags">${a.okta_groups.map((g) => `<span class="tag">${esc(g)}</span>`).join(" ") || '<span class="muted">none</span>'}</span>
+        <span class="k">AD effective</span><span class="tags">${groupTags(a) || '<span class="muted">none</span>'}</span>
+      </div>
+      ${accessTables(a)}
+      <p class="muted" style="font-size:.8rem;margin:.9rem 0 0">Dashed tags ⤴ are inherited through AD group nesting.</p>
+    </div>`;
+  fillCheckControls();
+}
+
+function fillCheckControls() {
+  const sys = byId("ex-sys").value;
+  if (sys === "truenas") {
+    byId("ex-res").innerHTML = Object.keys(D.shares).map((s) => `<option>${s}</option>`).join("");
+    byId("ex-act").innerHTML = ["read", "modify", "full"].map((a) => `<option>${a}</option>`).join("");
+  } else {
+    byId("ex-res").innerHTML = Object.keys(D.vms).map((v) => `<option value="${v}">/vms/${v} — ${esc(D.vms[v].name)}</option>`).join("");
+    byId("ex-act").innerHTML = Object.keys(D.proxmox_privileges).map((p) => `<option>${p}</option>`).join("");
+  }
+}
+
+async function doCheck() {
+  const u = byId("ex-user").value, sys = byId("ex-sys").value, res = byId("ex-res").value, act = byId("ex-act").value;
+  let d;
+  if (backend.mode === "live") {
+    // resolve-based decision so we don't need a dedicated live endpoint
+    const a = await backend.resolve(u);
+    if (sys === "truenas") { const order = { read: 1, modify: 2, full: 3 }; const have = order[a.truenas[res]] || 0;
+      d = { allowed: have >= order[act], granted: a.truenas[res] || "none", required: act, via: [], reason: have >= order[act] ? "granted" : "insufficient" }; }
+    else { const path = D.vms[res].path; const roleOrder = D.proxmox_roles; const nameToInt = Object.fromEntries(Object.entries(roleOrder).map(([k, v]) => [v, +k]));
+      const have = nameToInt[a.proxmox[path]] || 0; const need = D.proxmox_privileges[act];
+      d = { allowed: have >= need, granted: a.proxmox[path] || "NoAccess", required: roleOrder[need], via: [], reason: have >= need ? "granted" : "insufficient" }; }
+  } else {
+    d = sys === "truenas" ? await backend.checkTruenas(u, res, act) : await backend.checkProxmox(u, +res, act);
+  }
+  byId("ex-decision").innerHTML = `${chip(d.allowed)}
+    <span style="margin-left:.6rem">${esc(u)} → ${esc(sys)}:${esc(res)} <span class="muted">[${esc(act)}]</span></span>
+    <div class="muted" style="font-size:.85rem;margin-top:.4rem">granted <b>${esc(d.granted)}</b>, required <b>${esc(d.required)}</b> — ${esc(d.reason)}${d.via && d.via.length ? " (" + d.via.map(esc).join(", ") + ")" : ""}</div>`;
+}
+
+async function renderReview() {
+  const r = await backend.review();
+  byId("rv-flags").innerHTML = r.flags.length
+    ? r.flags.map((f) => `<div class="flag"><span class="bang">!</span> ${esc(f)}</div>`).join("")
+    : '<div class="chip allow">✓ estate is clean</div>';
+  const rows = Object.keys(r.entitlements).sort();
+  byId("rv-table").innerHTML = `<tr><th>User</th><th>Status</th><th>Shares</th><th>VMs</th></tr>` +
+    rows.map((u) => { const e = r.entitlements[u]; return `<tr><td>${esc(u)}</td>
+      <td>${e.active ? '<span class="chip allow">active</span>' : '<span class="chip deny">disabled</span>'}</td>
+      <td>${Object.keys(e.truenas).length}</td><td>${Object.keys(e.proxmox).length}</td></tr>`; }).join("");
+}
+
+async function renderAudit() {
+  const events = await backend.audit();
+  byId("audit-list").innerHTML = events.length ? events.map((e) => `
+    <div class="audit-row">
+      <span class="sys">${esc(e.system)}</span>
+      <span class="act">${esc(e.action)}</span>
+      <span class="det">${esc(e.target)} <span class="muted">${esc(e.detail || "")}</span></span>
+      <span>${e.outcome === "denied" || e.outcome === "error" ? '<span class="chip deny">' + esc(e.outcome) + '</span>' : '<span class="chip allow">' + esc(e.outcome) + '</span>'}</span>
+    </div>`).join("") : '<div class="muted">No events yet — try onboarding or a decision, then return here.</div>';
+}
+
+function renderArchitecture() {
+  byId("arch").innerHTML = `
+    <div style="display:grid;gap:12px;max-width:560px">
+      ${[["1", "okta", "Okta — identity / login", "Source of truth; authenticates and issues a session token."],
+         ["2", "ad", "Active Directory", "Synced from Okta; nested groups resolved by transitive closure."]]
+        .map(([i, c, t, d]) => `<div class="card" style="display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;padding:14px 16px">
+          <span class="stat" style="width:34px;height:34px;display:grid;place-items:center;padding:0;border-radius:50%;box-shadow:none"><i class="dot ${c}"></i></span>
+          <div><b>${t}</b><div class="muted" style="font-size:.85rem">${d}</div></div></div>`).join('<div class="center muted">↓</div>')}
+      <div class="center muted">↓ effective groups drive every ACL ↓</div>
+      <div class="grid2">
+        <div class="card" style="padding:14px 16px"><b><i class="dot nas"></i> TrueNAS</b><div class="muted" style="font-size:.85rem">Share ACLs: group → read/modify/full.</div></div>
+        <div class="card" style="padding:14px 16px"><b><i class="dot pve"></i> Proxmox</b><div class="muted" style="font-size:.85rem">(path, group) → PVE role, inherited.</div></div>
+      </div>
+    </div>`;
+}
+
+async function doLogin() {
+  const r = await backend.login(byId("lg-user").value.trim(), byId("lg-pass").value);
+  byId("lg-result").innerHTML = r.ok
+    ? `<div class="chip allow">✓ authenticated</div>
+       <div class="label" style="margin-top:1rem">session token</div>
+       <pre style="white-space:pre-wrap;word-break:break-all">${esc(r.token)}</pre>
+       <div class="label">claims</div><pre>${esc(JSON.stringify(r.claims, null, 2))}</pre>`
+    : `<div class="chip deny">✗ authentication failed</div>
+       <p class="muted" style="font-size:.85rem;margin-top:.7rem">Wrong password, or the account is deactivated (try offboarding a user, then signing in as them).</p>`;
+}
+
+/* ------------------------------------------------------------------ *
+ * Wiring
+ * ------------------------------------------------------------------ */
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+
+function refreshUserSelects() {
+  const names = backend.usernames();
+  for (const id of ["off-user", "ex-user"]) {
+    const cur = byId(id).value;
+    byId(id).innerHTML = names.map((n) => `<option>${n}</option>`).join("");
+    if (names.includes(cur)) byId(id).value = cur;
+  }
+}
+
+const RENDERERS = {
+  overview: renderOverview, directory: renderDirectory, explorer: renderExplorer,
+  review: renderReview, audit: renderAudit, architecture: renderArchitecture,
+};
+
+function go(view) {
+  $$(".navitem").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+  $$(".view").forEach((v) => v.classList.toggle("active", v.id === "view-" + view));
+  if (RENDERERS[view]) RENDERERS[view]();
+}
+
+function init() {
+  $$(".navitem").forEach((b) => b.onclick = () => go(b.dataset.view));
+  $$("[data-goto]").forEach((el) => el.onclick = () => go(el.dataset.goto));
+  fillRoleSelect();
+  refreshUserSelects();
+  byId("lg-pass").value = D.demo_password;
+  byId("lg-hint").textContent = `Demo password for every seeded account: ${D.demo_password}`;
+  byId("ob-submit").onclick = doOnboard;
+  byId("off-submit").onclick = doOffboard;
+  byId("ex-user").onchange = renderExplorer;
+  byId("ex-sys").onchange = fillCheckControls;
+  byId("ex-check").onclick = doCheck;
+  byId("lg-submit").onclick = doLogin;
+  detectMode().then(() => go("overview"));
+}
+
+document.addEventListener("DOMContentLoaded", init);

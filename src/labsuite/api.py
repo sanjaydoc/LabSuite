@@ -11,7 +11,7 @@ mirror the real systems:
 * ``POST /sync``            -- run the SCIM reconcile
 * ``GET  /access/{user}``   -- everything a user can touch
 * ``GET  /review``          -- the access review
-* ``GET  /``                -- a minimal HTML dashboard
+* ``GET  /``                -- the web GUI dashboard (served from docs/, live mode)
 
 Import is deliberately at module top: ``labsuite.api`` is only imported when you
 actually serve (``labsuite serve``) or test with the extra installed.
@@ -19,14 +19,22 @@ actually serve (``labsuite serve``) or test with the extra installed.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import Body, Depends, FastAPI, Header, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from labsuite.crypto import TokenError, verify_token
 from labsuite.engine import ControlPlane
 from labsuite.models import Department
 from labsuite.seed import build_lab
+
+# The web GUI + marketing site live in the repo's docs/ directory (also served
+# as-is by GitHub Pages). Locate it relative to this file so `labsuite serve`
+# can host the live dashboard when run from a checkout.
+_DOCS_DIR = Path(__file__).resolve().parents[2] / "docs"
 
 
 class TokenRequest(BaseModel):
@@ -120,16 +128,26 @@ def create_app(cp: ControlPlane | None = None) -> FastAPI:
         return control.access_review()
 
     # --------------------------------------------------------------- #
-    # Dashboard
+    # Web GUI + marketing site
     # --------------------------------------------------------------- #
-    @app.get("/", response_class=HTMLResponse)
-    def dashboard() -> str:
-        rows = "".join(
-            f"<tr><td>{u.username}</td><td>{u.display_name}</td>"
-            f"<td>{u.department.value}</td><td>{'active' if u.active else 'disabled'}</td></tr>"
-            for u in sorted(control.okta.list_users(), key=lambda x: x.username)
-        )
-        return f"""<!doctype html><html><head><title>LabSuite</title>
+    if _DOCS_DIR.is_dir():
+        # Serve the polished vanilla-JS dashboard + landing page from docs/.
+        # The GUI's live-mode probe hits /scim/v2/Users on this same origin.
+        app.mount("/site", StaticFiles(directory=str(_DOCS_DIR), html=True), name="site")
+
+        @app.get("/")
+        def root() -> RedirectResponse:
+            return RedirectResponse(url="/site/app/")
+    else:  # pragma: no cover - fallback when installed without the docs/ tree
+
+        @app.get("/", response_class=HTMLResponse)
+        def dashboard() -> str:
+            rows = "".join(
+                f"<tr><td>{u.username}</td><td>{u.display_name}</td>"
+                f"<td>{u.department.value}</td><td>{'active' if u.active else 'disabled'}</td></tr>"
+                for u in sorted(control.okta.list_users(), key=lambda x: x.username)
+            )
+            return f"""<!doctype html><html><head><title>LabSuite</title>
 <style>body{{font-family:system-ui;margin:2rem;color:#0f172a}}
 h1{{color:#2563eb}} table{{border-collapse:collapse}} td,th{{padding:.4rem .8rem;border-bottom:1px solid #e2e8f0}}</style>
 </head><body><h1>LabSuite</h1>

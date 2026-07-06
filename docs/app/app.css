@@ -1,0 +1,72 @@
+/* App-specific styles layered on the shared LabSuite/Merge theme. */
+
+.app { display: grid; grid-template-columns: 232px 1fr; min-height: calc(100vh - 64px); }
+
+.side { border-right: 1.5px solid var(--rule); padding: 22px 14px; }
+.side .navitem {
+  display: flex; align-items: center; gap: .6rem; width: 100%;
+  padding: .55rem .7rem; border-radius: 10px; border: 0; background: transparent;
+  font-family: var(--sans); font-size: .92rem; color: var(--ink-2); font-weight: 500;
+  cursor: pointer; text-align: left; margin-bottom: 2px;
+}
+.side .navitem:hover { background: var(--paper-2); }
+.side .navitem.active { background: var(--ink); color: #fff; }
+.side .navitem .k { margin-left: auto; font-size: .7rem; opacity: .5; }
+.side .grp { font-size: .7rem; color: var(--faint); letter-spacing: .08em; text-transform: uppercase; margin: 16px 8px 6px; }
+
+.main { padding: 30px 34px 64px; max-width: 940px; }
+.view { display: none; }
+.view.active { display: block; animation: fade .18s ease; }
+@keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.view h2 { font-size: 2rem; margin-bottom: .3rem; }
+.view .sub { color: var(--muted); margin-bottom: 1.6rem; font-size: .95rem; }
+
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 8px; }
+@media (max-width: 720px) { .stats { grid-template-columns: 1fr 1fr; } }
+.stat { border: 1px solid var(--hair); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-sm); }
+.stat .n { font-family: var(--serif); font-size: 2.2rem; line-height: 1; }
+.stat .l { color: var(--muted); font-size: .82rem; margin-top: .35rem; }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 820px) { .grid2 { grid-template-columns: 1fr; } }
+
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: .82rem; color: var(--muted); margin-bottom: .35rem; }
+input, select {
+  width: 100%; font-family: var(--sans); font-size: .95rem; color: var(--ink);
+  padding: .6rem .7rem; border: 1px solid var(--hair); border-radius: 10px; background: var(--paper);
+}
+input:focus, select:focus { outline: none; border-color: var(--ink); }
+
+.kv { display: grid; grid-template-columns: auto 1fr; gap: .3rem 1rem; font-size: .9rem; }
+.kv .k { color: var(--muted); }
+
+.tags { display: flex; flex-wrap: wrap; gap: .4rem; }
+.tag { font-size: .78rem; padding: .2rem .55rem; border-radius: var(--pill); border: 1px solid var(--hair); background: var(--paper-2); color: var(--ink-2); }
+.tag.nested { border-style: dashed; color: var(--ad); }
+
+.result { margin-top: 18px; }
+.flags .flag { display: flex; gap: .5rem; align-items: baseline; padding: .5rem 0; border-bottom: 1px solid var(--hair); font-size: .9rem; }
+.flags .flag .bang { color: var(--no); font-weight: 800; }
+
+.audit-row { display: grid; grid-template-columns: 120px 150px 1fr auto; gap: .6rem; font-size: .84rem; padding: .45rem .2rem; border-bottom: 1px solid var(--hair); align-items: center; }
+.audit-row .sys { color: var(--muted); font-family: var(--mono, monospace); font-size: .78rem; }
+.audit-row .act { font-weight: 600; }
+@media (max-width: 720px) { .audit-row { grid-template-columns: 1fr auto; } .audit-row .sys, .audit-row .det { display: none; } }
+
+.modebadge { font-size: .72rem; font-weight: 700; padding: .2rem .55rem; border-radius: var(--pill); }
+.modebadge.demo { background: #fff4e5; color: #a2661a; border: 1px solid #f0dcc0; }
+.modebadge.live { background: var(--ok-bg); color: var(--ok); border: 1px solid #cfe6da; }
+
+.linkish { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+
+.notice { font-size: .82rem; color: var(--muted); background: var(--paper-2); border: 1px solid var(--hair); border-radius: 10px; padding: .7rem .9rem; }
+
+@media (max-width: 720px) {
+  .app { grid-template-columns: 1fr; }
+  .side { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1.5px solid var(--rule); padding: 10px; gap: 6px; }
+  .side .grp { display: none; }
+  .side .navitem { width: auto; white-space: nowrap; }
+  .main { padding: 22px 18px 48px; }
+}

@@ -14,9 +14,14 @@
 ![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000)
 ![Deps](https://img.shields.io/badge/core%20deps-zero-success)
 
-[Architecture](#the-stack) · [Quickstart](#quickstart) · [Demo](#what-the-demo-shows) · [Swappable adapters](#swappable-by-design) · [How it maps to the real stack](#how-it-maps-to-the-real-stack)
+[Live demo ↗](https://sanjaydoc.github.io/LabSuite/app/) · [Website ↗](https://sanjaydoc.github.io/LabSuite/) · [Architecture](#the-stack) · [Dashboard](#the-web-dashboard) · [Quickstart](#quickstart) · [How it maps to the real stack](#how-it-maps-to-the-real-stack)
 
 </div>
+
+<p align="center">
+  <img src="docs/media/dashboard-onboard.png" alt="LabSuite dashboard — onboarding a hire across Okta, AD, TrueNAS and Proxmox in one action" width="900" />
+</p>
+<p align="center"><sub><b>Onboard once, provisioned everywhere.</b> One action creates the hire in Okta, assigns policy groups, syncs to AD, and resolves their exact TrueNAS + Proxmox access — <a href="https://sanjaydoc.github.io/LabSuite/app/">try the live demo</a>.</sub></p>
 
 ---
 
@@ -112,6 +117,33 @@ and Proxmox. *Upward* is a decision: "can she start VM 101?" resolves her
 **effective AD groups** (following nesting) → checks the Proxmox ACL on that VM's
 path → allow/deny, written to the audit log. TrueNAS and Proxmox never see Okta —
 they only ask AD for effective groups, exactly as the real systems are wired.
+
+## The web dashboard
+
+A polished, **zero-build web GUI** (vanilla HTML/CSS/JS — no framework) ships with
+the project. Run `labsuite serve` for the live, API-backed version, or open the
+[**live demo**](https://sanjaydoc.github.io/LabSuite/app/) — it runs entirely in
+your browser as a faithful mirror of the Python engine, so you can click through
+onboarding, access resolution, and reviews with nothing installed.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/media/dashboard-explorer.png" alt="Access explorer resolving a user's effective AD groups and access, and testing an allow/deny decision" /></td>
+    <td width="50%"><img src="docs/media/dashboard-review.png" alt="Access review board with anomaly flags" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub><b>Access explorer</b> — resolve Okta → AD (with nested groups ⤴) → TrueNAS + Proxmox, and test a single decision with its reason.</sub></td>
+    <td align="center"><sub><b>Access review</b> — quarterly-style entitlements with flags for stale access, FULL on sensitive shares, and datacenter admin.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/media/dashboard-overview.png" alt="Dashboard overview with stat tiles and the identity chain" /></td>
+    <td width="50%"><img src="docs/media/dashboard-onboard.png" alt="Onboard form and the provisioned result" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub><b>Overview</b> — the seeded lab at a glance.</sub></td>
+    <td align="center"><sub><b>Onboard</b> — the form and the resolved downstream access it produces.</sub></td>
+  </tr>
+</table>
 
 ## What makes it more than a toy
 

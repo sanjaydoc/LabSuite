@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LabSuite — control plane</title>
+  <meta name="description" content="LabSuite operational dashboard: onboard, offboard, resolve access, and review across Okta → AD → TrueNAS + Proxmox." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/theme.css" />
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="wrap">
+      <a class="brand" href="../">
+        <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <circle cx="10" cy="16" r="6.2" stroke="currentColor" stroke-width="2.4"/>
+          <rect x="17.5" y="9.8" width="12.2" height="12.4" rx="3.4" stroke="currentColor" stroke-width="2.4"/>
+          <path d="M14.6 16h4.2" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+        </svg>
+        labsuite <span class="muted" style="font-weight:500;font-size:.9rem">control plane</span>
+      </a>
+      <div class="nav-links">
+        <span id="mode" class="modebadge demo">demo mode</span>
+        <a href="../">Home</a>
+        <a class="btn btn-sm" href="https://github.com/sanjaydoc/LabSuite">GitHub ↗</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="app">
+    <aside class="side">
+      <div class="grp">Operate</div>
+      <button class="navitem active" data-view="overview">Overview</button>
+      <button class="navitem" data-view="directory">Directory</button>
+      <button class="navitem" data-view="onboard">Onboard</button>
+      <button class="navitem" data-view="offboard">Offboard</button>
+      <div class="grp">Govern</div>
+      <button class="navitem" data-view="explorer">Access explorer</button>
+      <button class="navitem" data-view="review">Access review</button>
+      <button class="navitem" data-view="audit">Audit log</button>
+      <div class="grp">Learn</div>
+      <button class="navitem" data-view="architecture">Architecture</button>
+      <button class="navitem" data-view="login">Sign-in demo</button>
+    </aside>
+
+    <main class="main">
+      <!-- Overview -->
+      <section class="view active" id="view-overview">
+        <h2>Overview</h2>
+        <div class="sub">The seeded lab, live in your browser. <span id="mode-note"></span></div>
+        <div class="stats" id="ov-stats"></div>
+        <div class="card" style="margin-top:18px">
+          <div class="label">The chain</div>
+          <p style="margin:.3rem 0 0">
+            <span class="chip"><i class="dot okta"></i> Okta</span> &rarr;
+            <span class="chip"><i class="dot ad"></i> Active Directory</span> &rarr;
+            <span class="chip"><i class="dot nas"></i> TrueNAS</span> +
+            <span class="chip"><i class="dot pve"></i> Proxmox</span>
+          </p>
+          <hr class="divider" />
+          <p class="muted" style="margin:0;font-size:.9rem">Try it: <span class="linkish" data-goto="onboard">onboard someone</span>, see their access in the <span class="linkish" data-goto="explorer">explorer</span>, then <span class="linkish" data-goto="offboard">offboard them</span> and watch the residual access go to zero.</p>
+        </div>
+      </section>
+
+      <!-- Directory -->
+      <section class="view" id="view-directory">
+        <h2>Directory</h2>
+        <div class="sub">Everyone in Okta, with the downstream access they resolve to.</div>
+        <div class="card" style="padding:6px 18px"><table id="dir-table"></table></div>
+      </section>
+
+      <!-- Onboard -->
+      <section class="view" id="view-onboard">
+        <h2>Onboard</h2>
+        <div class="sub">Provision a new hire across the whole stack in one action.</div>
+        <div class="grid2">
+          <div class="card">
+            <div class="field"><label>Full name</label><input id="ob-name" placeholder="Nadia Rahman" value="Nadia Rahman" /></div>
+            <div class="field"><label>Department</label><select id="ob-dept"></select></div>
+            <div class="field"><label>Role</label><select id="ob-role"></select></div>
+            <div id="ob-roledesc" class="notice" style="margin-bottom:14px"></div>
+            <button class="btn" id="ob-submit">Provision hire →</button>
+          </div>
+          <div class="card result" id="ob-result">
+            <div class="muted" style="font-size:.9rem">The provisioned account and its resolved access will appear here.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Offboard -->
+      <section class="view" id="view-offboard">
+        <h2>Offboard</h2>
+        <div class="sub">Deprovision same-day — and verify zero residual access.</div>
+        <div class="grid2">
+          <div class="card">
+            <div class="field"><label>User</label><select id="off-user"></select></div>
+            <button class="btn" id="off-submit">Deprovision →</button>
+            <p class="muted" style="font-size:.85rem;margin:14px 0 0">Deactivates in Okta, cascades to AD via SCIM, and re-resolves downstream access to confirm it is empty.</p>
+          </div>
+          <div class="card result" id="off-result">
+            <div class="muted" style="font-size:.9rem">The verification result will appear here.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Access explorer -->
+      <section class="view" id="view-explorer">
+        <h2>Access explorer</h2>
+        <div class="sub">Resolve the full chain for any user, and test a single decision.</div>
+        <div class="field" style="max-width:320px"><label>User</label><select id="ex-user"></select></div>
+        <div id="ex-report"></div>
+        <div class="card" style="margin-top:18px">
+          <div class="label">Test a decision</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:6px">
+            <div class="field" style="margin:0"><label>System</label><select id="ex-sys"><option value="truenas">TrueNAS</option><option value="proxmox">Proxmox</option></select></div>
+            <div class="field" style="margin:0"><label>Resource</label><select id="ex-res"></select></div>
+            <div class="field" style="margin:0"><label>Action</label><select id="ex-act"></select></div>
+            <button class="btn btn-sm" id="ex-check">Check</button>
+          </div>
+          <div id="ex-decision" style="margin-top:14px"></div>
+        </div>
+      </section>
+
+      <!-- Access review -->
+      <section class="view" id="view-review">
+        <h2>Access review</h2>
+        <div class="sub">A quarterly-style entitlement report with anomaly flags.</div>
+        <div class="card" style="margin-bottom:16px"><div class="label" style="margin-bottom:8px">Flags</div><div class="flags" id="rv-flags"></div></div>
+        <div class="card" style="padding:6px 18px"><table id="rv-table"></table></div>
+      </section>
+
+      <!-- Audit -->
+      <section class="view" id="view-audit">
+        <h2>Audit log</h2>
+        <div class="sub">Append-only — every mutation and access decision in this session.</div>
+        <div class="card" id="audit-list"></div>
+      </section>
+
+      <!-- Architecture -->
+      <section class="view" id="view-architecture">
+        <h2>Architecture</h2>
+        <div class="sub">Identity flows down; decisions resolve back up.</div>
+        <div class="card"><div id="arch"></div></div>
+      </section>
+
+      <!-- Login demo -->
+      <section class="view" id="view-login">
+        <h2>Sign-in demo</h2>
+        <div class="sub">Authenticate against the Okta layer and inspect the issued session token.</div>
+        <div class="grid2">
+          <div class="card" style="max-width:380px">
+            <div class="field"><label>Username</label><input id="lg-user" value="anguyen" /></div>
+            <div class="field"><label>Password</label><input id="lg-pass" type="password" /></div>
+            <button class="btn" id="lg-submit">Sign in →</button>
+            <p class="muted" style="font-size:.82rem;margin:12px 0 0" id="lg-hint"></p>
+          </div>
+          <div class="card result" id="lg-result"><div class="muted" style="font-size:.9rem">The auth result and token claims will appear here.</div></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

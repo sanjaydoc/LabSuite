@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LabSuite — status chip designs</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/theme.css" />
+  <style>
+    /* Exact bright red/green for the chooser (what we'd set --ok / --no to). */
+    :root { --ok-bright: #12a150; --no-bright: #e0332d; }
+
+    .page { max-width: 940px; margin: 0 auto; padding: 40px 24px 80px; }
+    .page h1 { font-size: 2.2rem; margin-bottom: .4rem; }
+    .lede { color: var(--ink-2); max-width: 62ch; }
+    .lede b { color: var(--ink); }
+
+    .opt { margin-top: 22px; }
+    .opt-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+    .opt-head h2 { font-size: 1.4rem; }
+    .opt-head .tagline { font-size: .82rem; color: var(--muted); }
+    .opt-desc { color: var(--ink-2); font-size: .92rem; margin: .3rem 0 16px; max-width: 66ch; }
+
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+    .panel { border: 1px solid var(--hair); border-radius: 12px; padding: 14px 16px; overflow-x: auto; }
+    .num { font-variant-numeric: tabular-nums; }
+    .statusrow { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: 12px; }
+
+    /* ---- OPTION 1 — outline pill (bright border + text, transparent) ---- */
+    .opt1 .chip.allow { color: var(--ok-bright); background: transparent; border: 1.5px solid var(--ok-bright); }
+    .opt1 .chip.deny  { color: var(--no-bright); background: transparent; border: 1.5px solid var(--no-bright); }
+
+    /* ---- OPTION 2 — solid pill (filled bright colour, white text) ---- */
+    .opt2 .chip.allow { color: #fff; background: var(--ok-bright); border: 1.5px solid var(--ok-bright); }
+    .opt2 .chip.deny  { color: #fff; background: var(--no-bright); border: 1.5px solid var(--no-bright); }
+
+    /* ---- OPTION 3 — minimal dot (colour dot + text, no pill) ---- */
+    .opt3 .chip.allow, .opt3 .chip.deny {
+      background: transparent; border: 0; padding: 0 .15rem; border-radius: 0; font-weight: 700;
+    }
+    .opt3 .chip.allow { color: var(--ok-bright); }
+    .opt3 .chip.deny  { color: var(--no-bright); }
+    .opt3 .chip.allow::before, .opt3 .chip.deny::before {
+      content: ""; width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none;
+    }
+    .opt3 .chip.allow::before { background: var(--ok-bright); }
+    .opt3 .chip.deny::before  { background: var(--no-bright); }
+  </style>
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="wrap">
+      <a class="brand" href="app/">
+        <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <circle cx="10" cy="16" r="6.2" stroke="currentColor" stroke-width="2.4"/>
+          <rect x="17.5" y="9.8" width="12.2" height="12.4" rx="3.4" stroke="currentColor" stroke-width="2.4"/>
+          <path d="M14.6 16h4.2" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+        </svg>
+        labsuite <span class="muted" style="font-weight:500;font-size:.9rem">status chip designs</span>
+      </a>
+      <div class="nav-links">
+        <a href="app/">Open the app ↗</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="page">
+    <div class="eyebrow">Design choice</div>
+    <h1>Status chip — pick a treatment</h1>
+    <p class="lede">Exact LabSuite theme (same fonts, same light canvas, same action buttons). All three brighten
+      the red &amp; green and drop the heavy filled blob. Judge each against the outline
+      <b>“mark serviced” / “reorder”</b> buttons beside it, then tell me <b>Option 1, 2, or 3</b>.</p>
+
+    <!-- OPTION 1 -->
+    <section class="opt opt1">
+      <div class="opt-head">
+        <h2>Option 1 — Outline pill</h2>
+        <span class="tagline">bright border + text, transparent · matches the buttons exactly</span>
+      </div>
+      <p class="opt-desc">The chip becomes an outline pill in the same language as the action buttons — only the
+        colour distinguishes status. Cleanest, most monochrome.</p>
+      <div class="grid2">
+        <div class="card panel">
+          <div class="label" style="margin-bottom:8px">Equipment &amp; maintenance</div>
+          <table>
+            <tr><th>Asset</th><th>Name</th><th>Maint</th><th></th></tr>
+            <tr><td>EQ-001</td><td>Leica Cryostat CM1950</td><td><span class="chip">due 5d</span></td><td><button class="btn act">mark serviced</button></td></tr>
+            <tr><td>EQ-003</td><td>Zeiss LSM 980 Confocal</td><td><span class="chip deny">overdue 3d</span></td><td><button class="btn act">mark serviced</button></td></tr>
+            <tr><td>EQ-006</td><td>Sartorius Analytical Balance</td><td><span class="chip deny">overdue 10d</span></td><td><button class="btn act">mark serviced</button></td></tr>
+          </table>
+        </div>
+        <div class="card panel">
+          <div class="label" style="margin-bottom:8px">Inventory</div>
+          <table>
+            <tr><th>Item</th><th>Qty</th><th>Stock</th><th></th></tr>
+            <tr><td>DMEM media</td><td class="num">8 bottles</td><td><span class="chip deny">low</span></td><td><button class="btn act">reorder</button></td></tr>
+            <tr><td>Fetal Bovine Serum</td><td class="num">25 bottles</td><td><span class="chip allow">ok</span></td><td></td></tr>
+            <tr><td>AAV9 packaging kit</td><td class="num">2 kits</td><td><span class="chip deny">low</span></td><td><button class="btn act">reorder</button></td></tr>
+            <tr><td>PBS 1x</td><td class="num">40 bottles</td><td><span class="chip allow">ok</span></td><td></td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="statusrow">
+        <span class="chip allow">ALLOW</span>
+        <span class="chip deny">DENY</span>
+        <span class="chip allow">active</span>
+        <span class="chip deny">disabled</span>
+        <span class="chip allow">day-one ready</span>
+        <span class="chip deny">stale</span>
+      </div>
+    </section>
+
+    <!-- OPTION 2 -->
+    <section class="opt opt2">
+      <div class="opt-head">
+        <h2>Option 2 — Solid pill</h2>
+        <span class="tagline">filled bright colour, white text · boldest, highest contrast</span>
+      </div>
+      <p class="opt-desc">Keeps a filled pill but brighter, with white text — status reads instantly. More saturated
+        than the monochrome buttons around it.</p>
+      <div class="grid2">
+        <div class="card panel">
+          <div class="label" style="margin-bottom:8px">Equipment &amp; maintenance</div>
+          <table>
+            <tr><th>Asset</th><th>Name</th><th>Maint</th><th></th></tr>
+            <tr><td>EQ-001</td><td>Leica Cryostat CM1950</td><td><span class="chip">due 5d</span></td><td><button class="btn act">mark serviced</button></td></tr>
+            <tr><td>EQ-003</td><td>Zeiss LSM 980 Confocal</td><td><span class="chip deny">overdue 3d</span></td><td><button class="btn act">mark serviced</button></td></tr>
+            <tr><td>EQ-006</td><td>Sartorius Analytical Balance</td><td><span class="chip deny">overdue 10d</span></td><td><button class="btn act">mark serviced</button></td></tr>
+          </table>
+        </div>
+        <div class="card panel">
+          <div class="label" style="margin-bottom:8px">Inventory</div>
+          <table>
+            <tr><th>Item</th><th>Qty</th><th>Stock</th><th></th></tr>
+            <tr><td>DMEM media</td><td class="num">8 bottles</td><td><span class="chip deny">low</span></td><td><button class="btn act">reorder</button></td></tr>
+            <tr><td>Fetal Bovine Serum</td><td class="num">25 bottles</td><td><span class="chip allow">ok</span></td><td></td></tr>
+            <tr><td>AAV9 packaging kit</td><td class="num">2 kits</td><td><span class="chip deny">low</span></td><td><button class="btn act">reorder</button></td></tr>
+            <tr><td>PBS 1x</td><td class="num">40 bottles</td><td><span class="chip allow">ok</span></td><td></td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="statusrow">
+        <span class="chip allow">ALLOW</span>
+        <span class="chip deny">DENY</span>
+        <span class="chip allow">active</span>
+        <span class="chip deny">disabled</span>
+        <span class="chip allow">day-one ready</span>
+        <span class="chip deny">stale</span>
+      </div>
+    </section>
+
+    <!-- OPTION 3 -->
+    <section class="opt opt3">
+      <div class="opt-head">
+        <h2>Option 3 — Minimal dot</h2>
+        <span class="tagline">colour dot + bold text, no pill · quietest, most editorial</span>
+      </div>
+      <p class="opt-desc">Drops the pill: a small colour dot with coloured text. The buttons stay the only pill shapes
+        on the row — calm and premium, closest to Merge’s restraint.</p>
+      <div class="grid2">
+        <div class="card panel">
+          <div class="label" style="margin-bottom:8px">Equipment &amp; maintenance</div>
+          <table>
+            <tr><th>Asset</th><th>Name</th><th>Maint</th><th></th></tr>
+            <tr><td>EQ-001</td><td>Leica Cryostat CM1950</td><td><span class="chip">due 5d</span></td><td><button class="btn act">mark serviced</button></td></tr>
+            <tr><td>EQ-003</td><td>Zeiss LSM 980 Confocal</td><td><span class="chip deny">overdue 3d</span></td><td><button class="btn act">mark serviced</button></td></tr>
+            <tr><td>EQ-006</td><td>Sartorius Analytical Balance</td><td><span class="chip deny">overdue 10d</span></td><td><button class="btn act">mark serviced</button></td></tr>
+          </table>
+        </div>
+        <div class="card panel">
+          <div class="label" style="margin-bottom:8px">Inventory</div>
+          <table>
+            <tr><th>Item</th><th>Qty</th><th>Stock</th><th></th></tr>
+            <tr><td>DMEM media</td><td class="num">8 bottles</td><td><span class="chip deny">low</span></td><td><button class="btn act">reorder</button></td></tr>
+            <tr><td>Fetal Bovine Serum</td><td class="num">25 bottles</td><td><span class="chip allow">ok</span></td><td></td></tr>
+            <tr><td>AAV9 packaging kit</td><td class="num">2 kits</td><td><span class="chip deny">low</span></td><td><button class="btn act">reorder</button></td></tr>
+            <tr><td>PBS 1x</td><td class="num">40 bottles</td><td><span class="chip allow">ok</span></td><td></td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="statusrow">
+        <span class="chip allow">ALLOW</span>
+        <span class="chip deny">DENY</span>
+        <span class="chip allow">active</span>
+        <span class="chip deny">disabled</span>
+        <span class="chip allow">day-one ready</span>
+        <span class="chip deny">stale</span>
+      </div>
+    </section>
+
+    <p class="muted" style="margin-top:34px;font-size:.86rem">Neutral chips (“due 5d”, “40d”) stay grey in all three — only the green/red status chips change.</p>
+  </div>
+
+</body>
+</html>

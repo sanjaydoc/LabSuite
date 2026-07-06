@@ -217,6 +217,32 @@ def create_app(cp: ControlPlane | None = None) -> FastAPI:
         return {"username": username, "mfa_enrolled": True}
 
     # --------------------------------------------------------------- #
+    # Just-in-time / break-glass admin
+    # --------------------------------------------------------------- #
+    @app.get("/jit")
+    def jit() -> dict:
+        return control.jit_status()
+
+    @app.post("/jit/grant")
+    def jit_grant(username: str = Body(...), group: str = Body(...),
+                  ttl_minutes: int = Body(default=60), reason: str = Body(default="")) -> dict:
+        try:
+            return control.grant_jit(username, group, ttl_minutes, reason).to_dict()
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/jit/revoke")
+    def jit_revoke(grant_id: str = Body(..., embed=True)) -> dict:
+        try:
+            return control.revoke_jit(grant_id).to_dict()
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/jit/sweep")
+    def jit_sweep() -> dict:
+        return {"expired": control.sweep_jit()}
+
+    # --------------------------------------------------------------- #
     # Networking (VLAN segmentation + IoT)
     # --------------------------------------------------------------- #
     @app.get("/network")

@@ -66,6 +66,49 @@ class DemoEngine {
     // access-review campaign (attestation)
     const cmp = data.campaign || {};
     this.campaign = { name: cmp.name || "", subjects: [...(cmp.subjects || [])], decisions: { ...(cmp.decisions || {}) }, open: cmp.open !== false };
+    // break-glass (just-in-time) elevation ledger
+    const j = data.jit || {};
+    this.jit = { grants: (j.grants || []).map((g) => ({ ...g })), counter: j.counter || 0 };
+  }
+
+  // ---- break-glass (just-in-time) admin ----------------------------
+  _now() { return Date.now() / 1000; }
+  grantJit(user, group, ttl, reason) {
+    if (!this.users[user]) throw new Error(`no such user ${user}`);
+    const now = this._now();
+    const g = { id: `JIT-${String(++this.jit.counter).padStart(4, "0")}`, username: user, group, reason: reason || "",
+      granted_by: "it-admin", granted_at: now, ttl_minutes: ttl, expires_at: now + ttl * 60, revoked: false };
+    this.jit.grants.push(g);
+    (this.users[user].okta_groups ||= []);
+    if (!this.users[user].okta_groups.includes(group)) this.users[user].okta_groups.push(group);
+    this.log("control-plane", "jit.grant", `${g.id}:${user}`, "success", `${group} for ${ttl}m`);
+    return g;
+  }
+  _reclaimJit(g) {
+    const still = this.jit.grants.some((x) => x.group === g.group && x.username === g.username && x.id !== g.id && !x.revoked);
+    if (!still && this.users[g.username]) this.users[g.username].okta_groups = this.users[g.username].okta_groups.filter((x) => x !== g.group);
+  }
+  revokeJit(id) {
+    const g = this.jit.grants.find((x) => x.id === id);
+    if (!g || g.revoked) return;
+    this._reclaimJit(g); g.revoked = true;
+    this.log("control-plane", "jit.revoke", id, "denied", "reclaimed");
+  }
+  sweepJit() {
+    const now = this._now();
+    const exp = this.jit.grants.filter((g) => !g.revoked && now >= g.expires_at);
+    for (const g of exp) { this._reclaimJit(g); g.revoked = true; this.log("control-plane", "jit.expire", g.id, "success", "auto-expired"); }
+    return exp;
+  }
+  jitStatus() {
+    const now = this._now();
+    const rem = (g) => Math.max(0, Math.floor((g.expires_at - now) / 60));
+    return {
+      now,
+      active: this.jit.grants.filter((g) => !g.revoked && now < g.expires_at).map((g) => ({ ...g, remaining_minutes: rem(g) })),
+      expired_unswept: this.jit.grants.filter((g) => !g.revoked && now >= g.expires_at),
+      all: this.jit.grants,
+    };
   }
 
   // ---- access-review campaign --------------------------------------
@@ -175,6 +218,9 @@ class DemoEngine {
       const prog = this.campaignProgress();
       if (prog.pending) add("medium", "campaign", `${prog.pending} user(s) not yet reviewed (${prog.completion_pct}% done)`, "review");
     }
+    const js = this.jitStatus();
+    for (const g of js.active) add("info", "break-glass", `${g.username} is elevated to ${g.group} (${g.remaining_minutes}m left)`, "jit");
+    for (const g of js.expired_unswept) add("high", "break-glass", `${g.username}: ${g.group} grant lapsed but not reclaimed — run a sweep`, "jit");
     const order = { high: 0, medium: 1, info: 2 };
     alerts.sort((a, b) => (order[a.severity] ?? 3) - (order[b.severity] ?? 3));
     const counts = { high: 0, medium: 0, info: 0 };
@@ -552,6 +598,10 @@ const demoBackend = {
   async startCampaign(name) { return engine.startCampaign(name); },
   async certifyUser(u) { engine.certifyUser(u); },
   async revokeUser(u) { engine.revokeUser(u); },
+  async jit() { return engine.jitStatus(); },
+  async jitGrant(u, g, ttl, reason) { engine.grantJit(u, g, ttl, reason); },
+  async jitRevoke(id) { engine.revokeJit(id); },
+  async jitSweep() { return engine.sweepJit(); },
   async usernames() { return Object.keys(engine.users).sort(); },
 };
 
@@ -621,6 +671,10 @@ const liveBackend = {
   async startCampaign(name) { return this._post("/campaign/start", { name }); },
   async certifyUser(u) { await this._post("/campaign/certify", { username: u }); },
   async revokeUser(u) { await this._post("/campaign/revoke", { username: u }); },
+  async jit() { try { return await this._json("/jit"); } catch { return { active: [], expired_unswept: [], all: [] }; } },
+  async jitGrant(u, g, ttl, reason) { await this._post("/jit/grant", { username: u, group: g, ttl_minutes: ttl, reason }); },
+  async jitRevoke(id) { await this._post("/jit/revoke", { grant_id: id }); },
+  async jitSweep() { return (await this._post("/jit/sweep", {})).expired; },
   async usernames() {
     try { return (await this._json("/scim/v2/Users")).Resources.map((u) => u.userName).sort(); }
     catch { return Object.keys(engine.users).sort(); }
@@ -1130,6 +1184,49 @@ function engineReach(summary, src, dst) {
   return (summary.policy || []).some((p) => p[0] === src && p[1] === dst);
 }
 
+async function renderJit() {
+  const st = await backend.jit();
+  const groups = D.elevated_groups || { "Domain-Admins": "Full admin" };
+  const users = await backend.usernames();
+  const activeRows = (st.active || []).map((g) => `<tr>
+    <td>${esc(g.id)}</td><td>${esc(g.username)}</td><td><span class="tag">${esc(g.group)}</span></td>
+    <td><span class="chip allow">${g.remaining_minutes}m left</span></td>
+    <td class="muted">${esc(g.reason || "")}</td>
+    <td>${_actBtn("jitrevoke", `data-id="${esc(g.id)}"`, "revoke")}</td></tr>`).join("");
+  const expiredRows = (st.expired_unswept || []).map((g) => `<tr>
+    <td>${esc(g.id)}</td><td>${esc(g.username)}</td><td><span class="tag">${esc(g.group)}</span></td>
+    <td><span class="chip deny">expired</span></td><td class="muted">${esc(g.reason || "")}</td><td></td></tr>`).join("");
+  byId("jit-body").innerHTML = `
+    <div class="card" style="margin-bottom:16px">
+      <div class="label" style="margin-bottom:8px">Grant break-glass access</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div class="field" style="margin:0"><label>User</label><select id="jit-user">${users.map((u) => `<option>${esc(u)}</option>`).join("")}</select></div>
+        <div class="field" style="margin:0"><label>Elevated group</label><select id="jit-group">${Object.keys(groups).map((g) => `<option>${esc(g)}</option>`).join("")}</select></div>
+        <div class="field" style="margin:0"><label>Duration</label><select id="jit-ttl"><option value="15">15 min</option><option value="60" selected>1 hour</option><option value="240">4 hours</option></select></div>
+        <div class="field" style="margin:0;flex:1;min-width:160px"><label>Reason</label><input id="jit-reason" placeholder="incident / change ticket" /></div>
+        <button class="btn btn-sm" id="jit-grant">Elevate</button>
+      </div>
+      <p class="muted" style="font-size:.8rem;margin:.7rem 0 0" id="jit-groupdesc"></p>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
+        <div class="label">Active elevations</div>
+        ${(st.expired_unswept || []).length ? `<button class="btn btn-sm ghost" id="jit-sweep">Sweep ${st.expired_unswept.length} expired</button>` : ""}
+      </div>
+      <table style="margin-top:8px"><tr><th>Grant</th><th>User</th><th>Group</th><th>Status</th><th>Reason</th><th></th></tr>
+        ${activeRows || expiredRows ? activeRows + expiredRows : '<tr><td class="muted" colspan="6">no active elevations</td></tr>'}</table>
+      <p class="muted" style="font-size:.8rem;margin:.7rem 0 0">Grants auto-expire at the end of their window; “sweep” reclaims any that have lapsed.</p>
+    </div>`;
+  const setDesc = () => byId("jit-groupdesc").textContent = groups[byId("jit-group").value] || "";
+  setDesc(); byId("jit-group").onchange = setDesc;
+  byId("jit-grant").onclick = async () => {
+    await backend.jitGrant(byId("jit-user").value, byId("jit-group").value, +byId("jit-ttl").value, byId("jit-reason").value);
+    renderJit();
+  };
+  if (byId("jit-sweep")) byId("jit-sweep").onclick = async () => { await backend.jitSweep(); renderJit(); };
+  $$("#jit-body button.act").forEach((b) => b.onclick = async () => { await backend.jitRevoke(b.dataset.id); renderJit(); });
+}
+
 function renderArchitecture() {
   byId("arch").innerHTML = `
     <div style="display:grid;gap:12px;max-width:560px">
@@ -1175,7 +1272,7 @@ const RENDERERS = {
   overview: renderOverview, directory: renderDirectory, explorer: renderExplorer,
   review: renderReview, audit: renderAudit, architecture: renderArchitecture,
   devices: renderDevices, compliance: renderCompliance, saas: renderSaas, ops: renderOps,
-  requests: renderRequests, network: renderNetwork,
+  requests: renderRequests, network: renderNetwork, jit: renderJit,
 };
 
 function go(view) {

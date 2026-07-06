@@ -794,6 +794,11 @@ window.LABSUITE_DATA = {
       ]
     ]
   },
+  "elevated_groups": {
+    "Domain-Admins": "Full datacenter + storage admin (TrueNAS FULL, Proxmox PVEAdmin)",
+    "CI-Operators": "CI/CD pipeline admin on the Proxmox CI pool",
+    "GPU-Cluster-Users": "GPU training cluster access"
+  },
   "all_groups": [
     "Bio",
     "CI-Operators",

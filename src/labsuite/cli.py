@@ -368,6 +368,45 @@ def cmd_campaign(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_jit(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    if args.grant:
+        user, group = args.grant
+        try:
+            g = cp.grant_jit(user, group, args.minutes, args.reason or "", actor=args.actor or "it-admin")
+        except KeyError as exc:
+            raise SystemExit(str(exc)) from exc
+        print(f"{_c(g.id, CYAN)} — {user} elevated to {group} for {args.minutes}m")
+        _save(cp, args.state)
+        return 0
+    if args.revoke:
+        try:
+            cp.revoke_jit(args.revoke, actor=args.actor or "it-admin")
+        except KeyError as exc:
+            raise SystemExit(str(exc)) from exc
+        print(f"{args.revoke}: {_c('revoked', RED)} — elevation reclaimed")
+        _save(cp, args.state)
+        return 0
+    if args.sweep:
+        expired = cp.sweep_jit(actor=args.actor or "it-admin")
+        print(f"swept {len(expired)} expired grant(s)")
+        _save(cp, args.state)
+        return 0
+
+    st = cp.jit_status()
+    _header("Break-glass (just-in-time) admin")
+    if not st["active"] and not st["expired_unswept"]:
+        print(_c("  no active elevations", GREEN))
+        return 0
+    for g in st["active"]:
+        print(f"  {_c(g['id'], CYAN)} {g['username']:10} -> {g['group']:18} "
+              f"{_c(str(g['remaining_minutes']) + 'm left', GREEN)}  {DIM}{g['reason']}{RESET}")
+    for g in st["expired_unswept"]:
+        print(f"  {_c(g['id'], RED)} {g['username']:10} -> {g['group']:18} "
+              f"{_c('EXPIRED — run --sweep', RED)}")
+    return 0
+
+
 def cmd_net(args: argparse.Namespace) -> int:
     cp = _load_or_build(args.state)
     # A single reachability check?
@@ -675,6 +714,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--reviewer", help="who is making the decision")
     p.add_argument("--note", help="decision note")
     p.set_defaults(func=cmd_campaign)
+
+    p = sub.add_parser("jit", help="break-glass (just-in-time) admin: time-bound elevation")
+    p.add_argument("--grant", nargs=2, metavar=("USER", "GROUP"), help="elevate USER into GROUP")
+    p.add_argument("--minutes", type=int, default=60, help="grant lifetime (with --grant)")
+    p.add_argument("--reason", help="why (with --grant)")
+    p.add_argument("--revoke", metavar="GRANT_ID", help="end a grant early")
+    p.add_argument("--sweep", action="store_true", help="auto-expire lapsed grants")
+    p.add_argument("--actor", help="who is performing the action")
+    p.set_defaults(func=cmd_jit)
 
     sub.add_parser("alerts", help="action center -- every outstanding flag in one feed").set_defaults(func=cmd_alerts)
     sub.add_parser("ops", help="operations dashboard (SaaS spend + flags)").set_defaults(func=cmd_ops)

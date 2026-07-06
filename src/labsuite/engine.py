@@ -34,6 +34,7 @@ from labsuite.audit import AuditLog
 from labsuite.campaigns import ReviewCampaign
 from labsuite.compliance import ComplianceRegistry
 from labsuite.endpoints import DeviceFleet
+from labsuite.jit import JitLedger, now_epoch
 from labsuite.models import AccessDecision, AccessLevel, Department, ProxmoxRole
 from labsuite.network import Network
 from labsuite.okta import OktaDirectory
@@ -162,6 +163,7 @@ class ControlPlane:
         self.network = network or Network()
         self.requests = RequestQueue()
         self.campaign = ReviewCampaign("")  # empty until a review campaign is started
+        self.jit = JitLedger()  # break-glass elevation ledger
         self.audit = audit or AuditLog()
         self.scim = ScimSync(self.okta, self.ad, self.audit)
 
@@ -508,6 +510,68 @@ class ControlPlane:
         return {"progress": self.campaign.progress(), "rows": rows}
 
     # ------------------------------------------------------------------ #
+    # Just-in-time / break-glass admin (time-bound elevation)
+    # ------------------------------------------------------------------ #
+    def grant_jit(self, username: str, group: str, ttl_minutes: int, reason: str = "",
+                  *, actor: str = "it-admin", now: float | None = None):
+        """Elevate a user into a powerful group for a fixed window."""
+        if self.okta.get_user(username) is None:
+            raise KeyError(f"no such user: {username!r}")
+        now = now_epoch() if now is None else now
+        grant = self.jit.create(username, group, ttl_minutes, reason, actor, now=now)
+        self.okta.ensure_group(group)
+        self.okta.add_to_group(username, group)
+        self.scim.reconcile(actor=actor)
+        self.audit.record(actor, "jit.grant", f"{grant.id}:{username}", "control-plane",
+                          detail=f"{group} for {ttl_minutes}m — {reason}")
+        return grant
+
+    def _reclaim_jit(self, grant, *, actor: str) -> None:
+        """Remove the elevated membership for a grant, unless another grant holds it."""
+        still_needed = any(
+            g.group == grant.group and g.username == grant.username and g.id != grant.id and not g.revoked
+            for g in self.jit.grants
+        )
+        if not still_needed:
+            self.okta.remove_from_group(grant.username, grant.group)
+            self.scim.reconcile(actor=actor)
+
+    def revoke_jit(self, grant_id: str, *, actor: str = "it-admin"):
+        """End a break-glass grant early and reclaim the elevated membership."""
+        grant = self.jit.get(grant_id)
+        if grant is None:
+            raise KeyError(f"no such grant: {grant_id!r}")
+        if grant.revoked:
+            return grant
+        self._reclaim_jit(grant, actor=actor)
+        grant.revoked = True
+        self.audit.record(actor, "jit.revoke", f"{grant.id}:{grant.username}", "control-plane",
+                          outcome="denied", detail=f"reclaimed {grant.group}")
+        return grant
+
+    def sweep_jit(self, *, actor: str = "it-admin", now: float | None = None) -> list[dict]:
+        """Auto-expire every lapsed grant: reclaim membership, mark revoked."""
+        now = now_epoch() if now is None else now
+        expired = self.jit.expired_unswept(now)
+        for grant in expired:
+            self._reclaim_jit(grant, actor=actor)
+            grant.revoked = True
+            self.audit.record(actor, "jit.expire", f"{grant.id}:{grant.username}", "control-plane",
+                              detail=f"auto-expired {grant.group}")
+        return [g.to_dict() for g in expired]
+
+    def jit_status(self, *, now: float | None = None) -> dict:
+        """Active grants (with time remaining) plus the full ledger."""
+        now = now_epoch() if now is None else now
+        active = [{**g.to_dict(), "remaining_minutes": g.remaining_minutes(now)} for g in self.jit.active(now)]
+        return {
+            "now": now,
+            "active": active,
+            "expired_unswept": [g.to_dict() for g in self.jit.expired_unswept(now)],
+            "all": [g.to_dict() for g in self.jit.grants],
+        }
+
+    # ------------------------------------------------------------------ #
     # Action center -- one inbox aggregating every operational flag
     # ------------------------------------------------------------------ #
     def action_center(self) -> dict:
@@ -561,6 +625,14 @@ class ControlPlane:
         pending = self.requests.pending()
         if pending:
             add("info", "requests", f"{len(pending)} access request(s) awaiting approval", "requests")
+
+        # Break-glass: standing elevated access should be visible and short-lived.
+        now = now_epoch()
+        active_jit = self.jit.active(now)
+        for g in active_jit:
+            add("info", "break-glass", f"{g.username} is elevated to {g.group} ({g.remaining_minutes(now)}m left)", "jit")
+        for g in self.jit.expired_unswept(now):
+            add("high", "break-glass", f"{g.username}: {g.group} grant lapsed but not reclaimed — run a sweep", "jit")
 
         # Governance: an access-review campaign still awaiting attestations.
         if self.campaign.open and self.campaign.subjects:
@@ -695,6 +767,7 @@ class ControlPlane:
             "network": self.network.to_dict(),
             "requests": self.requests.to_dict(),
             "campaign": self.campaign.to_dict(),
+            "jit": self.jit.to_dict(),
             "audit": self.audit.to_list(),
         }
 
@@ -715,4 +788,5 @@ class ControlPlane:
         )
         cp.requests = RequestQueue.from_dict(data.get("requests", {}))
         cp.campaign = ReviewCampaign.from_dict(data.get("campaign", {}))
+        cp.jit = JitLedger.from_dict(data.get("jit", {}))
         return cp

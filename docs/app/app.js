@@ -189,6 +189,39 @@ class DemoEngine {
     };
   }
 
+  // ---- onboarding readiness checklist ------------------------------
+  onboardingChecklist(username) {
+    const u = this.users[username];
+    if (!u) throw new Error(`no such user ${username}`);
+    const groups = u.okta_groups || [];
+    const devTag = this.deviceByUser[username];
+    const device = devTag ? this.devices[devTag] : null;
+    const trainings = this.trainingsFor(username);
+    const tKeys = Object.keys(trainings);
+    const trainingsDone = tKeys.length > 0 && tKeys.every((t) => trainings[t] === "current");
+    const saas = Object.values(this.saas).filter((a) => a.assignees.has(username)).map((a) => a.name);
+    const items = [
+      { item: "Okta account active", done: !!u.active, required: true, detail: u.email },
+      { item: "Security groups assigned", done: groups.length > 0, required: true, detail: `${groups.length} group(s)` },
+      { item: "Synced to Active Directory", done: groups.length > 0, required: true, detail: "" },
+      { item: "Laptop imaged & shipped", done: !!device && device.status === "assigned", required: true, detail: device ? `${device.asset_tag} · ${device.image}` : "no device" },
+      { item: "MFA (Okta Verify) enrolled", done: this.isMfaEnrolled(username), required: true, detail: "" },
+      { item: "SaaS seats provisioned", done: saas.length > 0, required: true, detail: `${saas.length} app(s)` },
+      { item: "Required training complete", done: trainingsDone, required: false, detail: tKeys.length ? tKeys.map((t) => `${t}:${trainings[t]}`).join(", ") : "none required" },
+    ];
+    const required = items.filter((i) => i.required);
+    const done = required.filter((i) => i.done).length;
+    return { username, display_name: u.display_name, items, ready: done === required.length, completion_pct: Math.round((100 * done) / required.length) };
+  }
+  readinessSummary() {
+    const rows = Object.values(this.users).filter((u) => u.active).map((u) => {
+      const c = this.onboardingChecklist(u.username);
+      return { username: u.username, display_name: u.display_name, ready: c.ready, completion_pct: c.completion_pct };
+    });
+    rows.sort((a, b) => (a.ready - b.ready) || a.username.localeCompare(b.username));
+    return { rows, ready_count: rows.filter((r) => r.ready).length, total: rows.length };
+  }
+
   // ---- action center: aggregate every outstanding flag --------------
   actionCenter() {
     const alerts = [];
@@ -602,6 +635,8 @@ const demoBackend = {
   async jitGrant(u, g, ttl, reason) { engine.grantJit(u, g, ttl, reason); },
   async jitRevoke(id) { engine.revokeJit(id); },
   async jitSweep() { return engine.sweepJit(); },
+  async readiness() { return engine.readinessSummary(); },
+  async readinessUser(u) { return engine.onboardingChecklist(u); },
   async usernames() { return Object.keys(engine.users).sort(); },
 };
 
@@ -675,6 +710,8 @@ const liveBackend = {
   async jitGrant(u, g, ttl, reason) { await this._post("/jit/grant", { username: u, group: g, ttl_minutes: ttl, reason }); },
   async jitRevoke(id) { await this._post("/jit/revoke", { grant_id: id }); },
   async jitSweep() { return (await this._post("/jit/sweep", {})).expired; },
+  async readiness() { try { return await this._json("/readiness"); } catch { return { rows: [], ready_count: 0, total: 0 }; } },
+  async readinessUser(u) { return this._json(`/readiness/${u}`); },
   async usernames() {
     try { return (await this._json("/scim/v2/Users")).Resources.map((u) => u.userName).sort(); }
     catch { return Object.keys(engine.users).sort(); }
@@ -1227,6 +1264,38 @@ async function renderJit() {
   $$("#jit-body button.act").forEach((b) => b.onclick = async () => { await backend.jitRevoke(b.dataset.id); renderJit(); });
 }
 
+async function renderReadiness() {
+  const s = await backend.readiness();
+  const sel = byId("rd-user");
+  const cur = sel.value;
+  sel.innerHTML = (s.rows || []).map((r) => `<option>${esc(r.username)}</option>`).join("");
+  if (s.rows.some((r) => r.username === cur)) sel.value = cur;
+  const summary = (s.rows || []).map((r) => `<tr data-user="${esc(r.username)}" class="linkish-row">
+    <td>${esc(r.username)}</td><td>${esc(r.display_name)}</td>
+    <td>${r.ready ? '<span class="chip allow">✓ day-one ready</span>' : `<span class="chip deny">${r.completion_pct}%</span>`}</td></tr>`).join("");
+  byId("rd-summary").innerHTML = `<div class="label" style="margin-bottom:6px">Readiness — ${s.ready_count}/${s.total} day-one ready</div>
+    <table><tr><th>User</th><th>Name</th><th>Status</th></tr>${summary}</table>`;
+  await renderChecklist();
+  $$("#rd-summary tr[data-user]").forEach((tr) => tr.onclick = () => { byId("rd-user").value = tr.dataset.user; renderChecklist(); });
+  byId("rd-user").onchange = renderChecklist;
+}
+
+async function renderChecklist() {
+  const u = byId("rd-user").value;
+  if (!u) { byId("rd-checklist").innerHTML = ""; return; }
+  const c = await backend.readinessUser(u);
+  const rows = c.items.map((i) => `<div class="check-row">
+    <span class="check ${i.done ? "on" : "off"}">${i.done ? "✓" : "○"}</span>
+    <span>${esc(i.item)}${i.required ? "" : ' <span class="muted" style="font-size:.75rem">(optional)</span>'}</span>
+    <span class="muted" style="font-size:.82rem">${esc(i.detail)}</span></div>`).join("");
+  const badge = c.ready ? '<span class="chip allow">✓ day-one ready</span>' : `<span class="chip deny">${c.completion_pct}% ready</span>`;
+  byId("rd-checklist").innerHTML = `<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
+      <div class="label">${esc(c.display_name)} · ${esc(u)}</div>${badge}</div>
+    <div class="progress"><span style="width:${c.completion_pct}%"></span></div>
+    <div class="checklist" style="margin-top:.6rem">${rows}</div></div>`;
+}
+
 function renderArchitecture() {
   byId("arch").innerHTML = `
     <div style="display:grid;gap:12px;max-width:560px">
@@ -1272,7 +1341,7 @@ const RENDERERS = {
   overview: renderOverview, directory: renderDirectory, explorer: renderExplorer,
   review: renderReview, audit: renderAudit, architecture: renderArchitecture,
   devices: renderDevices, compliance: renderCompliance, saas: renderSaas, ops: renderOps,
-  requests: renderRequests, network: renderNetwork, jit: renderJit,
+  requests: renderRequests, network: renderNetwork, jit: renderJit, readiness: renderReadiness,
 };
 
 function go(view) {

@@ -65,6 +65,16 @@ input:focus, select:focus { outline: none; border-color: var(--ink); }
 .progress { height: 8px; background: var(--paper-2); border: 1px solid var(--hair); border-radius: 999px; overflow: hidden; margin: .5rem 0 .2rem; }
 .progress > span { display: block; height: 100%; background: var(--ink); border-radius: 999px; transition: width .3s ease; }
 
+/* --- onboarding checklist ---------------------------------------------- */
+.checklist { display: flex; flex-direction: column; }
+.check-row { display: grid; grid-template-columns: 24px 1fr auto; gap: .5rem; align-items: center; padding: .4rem 0; border-bottom: 1px solid var(--hair); font-size: .9rem; }
+.check-row:last-child { border-bottom: 0; }
+.check { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: .72rem; font-weight: 700; }
+.check.on { background: var(--ok-bg); color: var(--ok); border: 1px solid #cfe6da; }
+.check.off { background: var(--paper-2); color: var(--muted); border: 1px solid var(--hair); }
+.linkish-row { cursor: pointer; }
+.linkish-row:hover { background: var(--paper-2); }
+
 /* --- action center ----------------------------------------------------- */
 .alerts-list { display: flex; flex-direction: column; }
 .alert-row {

@@ -310,6 +310,29 @@ def cmd_devices(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_readiness(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    if args.user:
+        try:
+            c = cp.onboarding_checklist(args.user)
+        except KeyError as exc:
+            raise SystemExit(str(exc)) from exc
+        status = _c("READY", GREEN) if c["ready"] else _c(f"{c['completion_pct']}%", RED)
+        _header(f"Onboarding readiness: {c['display_name']} ({args.user}) — {status}")
+        for i in c["items"]:
+            box = _c("[x]", GREEN) if i["done"] else _c("[ ]", RED)
+            req = "" if i["required"] else f" {DIM}(optional){RESET}"
+            print(f"  {box} {i['item']}{req}  {DIM}{i['detail']}{RESET}")
+        return 0
+
+    s = cp.readiness_summary()
+    _header(f"Onboarding readiness — {s['ready_count']}/{s['total']} day-one ready")
+    for r in s["rows"]:
+        status = _c("ready", GREEN) if r["ready"] else _c(f"{r['completion_pct']}%", RED)
+        print(f"  {r['username']:10} {status:8}  {DIM}{r['display_name']}{RESET}")
+    return 0
+
+
 def cmd_alerts(args: argparse.Namespace) -> int:
     cp = _load_or_build(args.state)
     ac = cp.action_center()
@@ -723,6 +746,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--sweep", action="store_true", help="auto-expire lapsed grants")
     p.add_argument("--actor", help="who is performing the action")
     p.set_defaults(func=cmd_jit)
+
+    p = sub.add_parser("readiness", help="onboarding readiness checklist (day-one ready?)")
+    p.add_argument("--user", help="show one hire's full checklist")
+    p.set_defaults(func=cmd_readiness)
 
     sub.add_parser("alerts", help="action center -- every outstanding flag in one feed").set_defaults(func=cmd_alerts)
     sub.add_parser("ops", help="operations dashboard (SaaS spend + flags)").set_defaults(func=cmd_ops)

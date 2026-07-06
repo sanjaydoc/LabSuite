@@ -35,7 +35,7 @@ from labsuite.campaigns import ReviewCampaign
 from labsuite.compliance import ComplianceRegistry
 from labsuite.endpoints import DeviceFleet
 from labsuite.jit import JitLedger, now_epoch
-from labsuite.models import AccessDecision, AccessLevel, Department, ProxmoxRole
+from labsuite.models import AccessDecision, AccessLevel, Department, DeviceStatus, ProxmoxRole
 from labsuite.network import Network
 from labsuite.okta import OktaDirectory
 from labsuite.operations import Operations
@@ -508,6 +508,63 @@ class ControlPlane:
                 "vms": len(report.proxmox),
             })
         return {"progress": self.campaign.progress(), "rows": rows}
+
+    # ------------------------------------------------------------------ #
+    # Onboarding readiness checklist (is this hire day-one ready?)
+    # ------------------------------------------------------------------ #
+    def onboarding_checklist(self, username: str) -> dict:
+        """Per-hire checklist across every system a new joiner must be set up in.
+
+        ``required`` items must all be done for ``ready`` (day-one) status; the
+        training item is informational (gated roles legitimately start pending).
+        """
+        user = self.okta.get_user(username)
+        if user is None:
+            raise KeyError(f"no such user: {username!r}")
+        groups = self.okta.groups_for(username)
+        in_ad = username in {u.username for u in self.ad.list_users()} if hasattr(self.ad, "list_users") else bool(groups)
+        device = self.endpoints.device_for(username)
+        has_device = device is not None and device.status == DeviceStatus.ASSIGNED
+        trainings = self.compliance.trainings_for(username)
+        trainings_done = bool(trainings) and all(s == "current" for s in trainings.values())
+        saas = self.ops.apps_for(username)
+
+        items = [
+            {"item": "Okta account active", "done": user.active, "required": True,
+             "detail": user.email},
+            {"item": "Security groups assigned", "done": bool(groups), "required": True,
+             "detail": f"{len(groups)} group(s)"},
+            {"item": "Synced to Active Directory", "done": in_ad, "required": True, "detail": ""},
+            {"item": "Laptop imaged & shipped", "done": has_device, "required": True,
+             "detail": f"{device.asset_tag} · {device.image}" if device else "no device"},
+            {"item": "MFA (Okta Verify) enrolled", "done": self.okta.is_mfa_enrolled(username), "required": True,
+             "detail": ""},
+            {"item": "SaaS seats provisioned", "done": bool(saas), "required": True,
+             "detail": f"{len(saas)} app(s)"},
+            {"item": "Required training complete", "done": trainings_done, "required": False,
+             "detail": ", ".join(f"{t}:{s}" for t, s in sorted(trainings.items())) or "none required"},
+        ]
+        required = [i for i in items if i["required"]]
+        done = sum(1 for i in required if i["done"])
+        return {
+            "username": username,
+            "display_name": user.display_name,
+            "items": items,
+            "ready": done == len(required),
+            "completion_pct": round(100 * done / len(required)) if required else 100,
+        }
+
+    def readiness_summary(self) -> dict:
+        """Day-one-ready status for every active user."""
+        rows = []
+        for user in self.okta.list_users():
+            if not user.active:
+                continue
+            c = self.onboarding_checklist(user.username)
+            rows.append({"username": user.username, "display_name": user.display_name,
+                         "ready": c["ready"], "completion_pct": c["completion_pct"]})
+        rows.sort(key=lambda r: (r["ready"], r["username"]))
+        return {"rows": rows, "ready_count": sum(1 for r in rows if r["ready"]), "total": len(rows)}
 
     # ------------------------------------------------------------------ #
     # Just-in-time / break-glass admin (time-bound elevation)

@@ -39,6 +39,7 @@
       <button class="navitem" data-view="onboard">Onboard</button>
       <button class="navitem" data-view="offboard">Offboard</button>
       <button class="navitem" data-view="devices">Devices</button>
+      <button class="navitem" data-view="readiness">Readiness</button>
       <div class="grp">Govern</div>
       <button class="navitem" data-view="explorer">Access explorer</button>
       <button class="navitem" data-view="requests">Requests</button>
@@ -121,6 +122,19 @@
         <h2>Devices</h2>
         <div class="sub">Managed laptop fleet — imaged per role on day one, flagged wipe &amp; return at offboarding.</div>
         <div class="card" style="padding:6px 18px"><table id="dev-table"></table></div>
+      </section>
+
+      <!-- Onboarding readiness -->
+      <section class="view" id="view-readiness">
+        <h2>Onboarding readiness</h2>
+        <div class="sub">Is each hire day-one ready? A live checklist across accounts, groups, laptop, MFA, SaaS, and training.</div>
+        <div class="grid2">
+          <div class="card" id="rd-summary" style="padding:14px 18px"></div>
+          <div>
+            <div class="field" style="max-width:280px"><label>Hire</label><select id="rd-user"></select></div>
+            <div id="rd-checklist"></div>
+          </div>
+        </div>
       </section>
 
       <!-- Access explorer -->

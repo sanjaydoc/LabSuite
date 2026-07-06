@@ -119,6 +119,34 @@ def create_app(cp: ControlPlane | None = None) -> FastAPI:
     def sync() -> dict:
         return control.sync().to_dict()
 
+    # --------------------------------------------------------------- #
+    # Access requests + approvals
+    # --------------------------------------------------------------- #
+    @app.get("/requests")
+    def list_requests() -> dict:
+        return {"requests": [r.to_dict() for r in control.requests.all()]}
+
+    @app.post("/requests")
+    def create_request(requester: str = Body(...), group: str = Body(...), justification: str = Body(default="")) -> dict:
+        try:
+            return control.request_access(requester, group, justification).to_dict()
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/requests/approve")
+    def approve(request_id: str = Body(..., embed=True)) -> dict:
+        try:
+            return control.approve_request(request_id).to_dict()
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/requests/deny")
+    def deny(request_id: str = Body(...), note: str = Body(default="")) -> dict:
+        try:
+            return control.deny_request(request_id, note=note).to_dict()
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
     @app.get("/access/{username}")
     def access(username: str) -> dict:
         return control.resolve_access(username).to_dict()

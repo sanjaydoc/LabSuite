@@ -127,6 +127,7 @@ Delivery, Platform, Data-Science + Lab-Ops, Compliance, Facilities, Legal, IT):
 | Module | What it does | Who it serves |
 |---|---|---|
 | **Identity & access** | Onboard/offboard, SCIM sync, nested-group ACLs, audited allow/deny, access reviews | IT, everyone |
+| **Access requests & approvals** | Self-service request → reviewer approve/deny → auto-provisioned through the normal Okta→AD path, audited | IT, managers, everyone |
 | **Endpoints / devices** | Images + ships a managed laptop per role (encryption, MDM, MFA, Iru/Ansible); wipe & return at offboard | IT |
 | **Compliance-gated access** | Training records (IACUC, biosafety…) that gate sensitive lab data; access auto-revokes when training lapses | Compliance, In-Vivo, IT |
 | **SaaS & cost** | Who has a seat in what and **what it costs**; orphaned-seat detection; provisioned on onboard, reclaimed on offboard | IT, Finance |
@@ -265,6 +266,9 @@ labsuite train --user nrahman --training IACUC      # complete a training (unloc
 labsuite offboard --user nrahman                    # same-day, verified clean
 
 # governance + operations
+labsuite request --user lpark --group Data-Science --why "ML side-project"
+labsuite requests                                   # the request queue
+labsuite approve --id REQ-0001                       # grants it through Okta -> AD
 labsuite review                                     # access review + anomaly flags
 labsuite compliance                                 # training records
 labsuite devices                                    # managed laptop fleet

@@ -38,6 +38,7 @@ from labsuite.okta import OktaDirectory
 from labsuite.operations import Operations
 from labsuite.policy import image_for, onboarding_groups, required_trainings
 from labsuite.proxmox import Proxmox
+from labsuite.requests import AccessRequest, RequestQueue
 from labsuite.scim import ScimSync, SyncReport
 from labsuite.truenas import TrueNAS
 
@@ -153,6 +154,7 @@ class ControlPlane:
         self.endpoints: EndpointProvider = endpoints or DeviceFleet()
         self.compliance = compliance or ComplianceRegistry()
         self.ops = operations or Operations()
+        self.requests = RequestQueue()
         self.audit = audit or AuditLog()
         self.scim = ScimSync(self.okta, self.ad, self.audit)
 
@@ -445,6 +447,46 @@ class ControlPlane:
         return self.scim.reconcile(actor=actor)
 
     # ------------------------------------------------------------------ #
+    # Access requests + approvals (self-service governance)
+    # ------------------------------------------------------------------ #
+    def request_access(self, requester: str, group: str, justification: str = "") -> AccessRequest:
+        """A user requests membership in a group (creates a pending request)."""
+        if self.okta.get_user(requester) is None:
+            raise KeyError(f"no such user: {requester!r}")
+        req = self.requests.create(requester, group, justification)
+        self.audit.record(requester, "access.request", f"{req.id}:{group}", "control-plane", detail=justification)
+        return req
+
+    def approve_request(self, request_id: str, *, approver: str = "it-admin") -> AccessRequest:
+        """Approve a request -- grant the group through the normal Okta -> AD path."""
+        req = self.requests.get(request_id)
+        if req is None:
+            raise KeyError(f"no such request: {request_id!r}")
+        if req.status != "pending":
+            return req
+        self.okta.ensure_group(req.group)
+        self.okta.add_to_group(req.requester, req.group)
+        self.scim.reconcile(actor=approver)
+        req.status = "approved"
+        req.decided_by = approver
+        self.audit.record(approver, "request.approve", f"{req.id}:{req.group}", "control-plane",
+                          detail=f"granted {req.group} to {req.requester}")
+        return req
+
+    def deny_request(self, request_id: str, *, approver: str = "it-admin", note: str = "") -> AccessRequest:
+        req = self.requests.get(request_id)
+        if req is None:
+            raise KeyError(f"no such request: {request_id!r}")
+        if req.status != "pending":
+            return req
+        req.status = "denied"
+        req.decided_by = approver
+        req.note = note
+        self.audit.record(approver, "request.deny", f"{req.id}:{req.group}", "control-plane",
+                          outcome="denied", detail=note)
+        return req
+
+    # ------------------------------------------------------------------ #
     # Operations (SaaS / equipment / inventory / vendors / safety)
     # ------------------------------------------------------------------ #
     def _is_active(self, username: str) -> bool:
@@ -501,6 +543,7 @@ class ControlPlane:
             "endpoints": self.endpoints.to_dict(),
             "compliance": self.compliance.to_dict(),
             "operations": self.ops.to_dict(),
+            "requests": self.requests.to_dict(),
             "audit": self.audit.to_list(),
         }
 
@@ -518,4 +561,5 @@ class ControlPlane:
             operations=Operations.from_dict(data.get("operations", {})),
             audit=audit,
         )
+        cp.requests = RequestQueue.from_dict(data.get("requests", {}))
         return cp

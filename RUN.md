@@ -51,6 +51,12 @@ labsuite train  --user nrahman --training IACUC          # complete a training
 labsuite train  --user nrahman --training Biosafety --expire   # lapse it (revokes gated access)
 labsuite compliance                                       # all training records
 
+# Access requests + approvals (self-service governance)
+labsuite request --user lpark --group Data-Science --why "ML side-project"
+labsuite requests                         # the request queue
+labsuite approve --id REQ-0001            # grant it (Okta -> AD)
+labsuite deny --id REQ-0002 --note "not justified"
+
 # Governance + operations
 labsuite login   --user anguyen           # demo password is used by default
 labsuite sync                             # run the SCIM reconcile
@@ -99,6 +105,7 @@ labsuite serve                 # http://127.0.0.1:8000
 - `GET /devices`, `GET /compliance`, `POST /compliance/complete` · `/expire`
 - `GET /ops`, `GET /saas`, `GET /assets`, `GET /inventory`, `GET /vendors`, `GET /safety`
 - `POST /assets/maintenance`, `/inventory/reorder`, `/safety/resolve`, `/vendors/renew`, `/saas/grant`, `/saas/revoke`
+- `GET /requests`, `POST /requests` · `/requests/approve` · `/requests/deny`
 
 The web GUI is **fully operable** — onboard/offboard, complete/lapse training,
 grant/revoke SaaS seats, mark maintenance done, reorder stock, renew vendors, and

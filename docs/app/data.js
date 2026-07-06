@@ -610,6 +610,29 @@ window.LABSUITE_DATA = {
       }
     ]
   },
+  "all_groups": [
+    "Bio",
+    "CI-Operators",
+    "Compliance",
+    "Compliance-Read",
+    "Data-Science",
+    "Delivery",
+    "Domain-Admins",
+    "Everyone",
+    "Facilities",
+    "GPU-Cluster-Users",
+    "Histology",
+    "IT",
+    "In-Vivo",
+    "Lab",
+    "Lab-DAQ-Operators",
+    "Lab-Ops",
+    "Legal",
+    "Legal-Privileged",
+    "Platform",
+    "Research"
+  ],
+  "requests": [],
   "users": [
     {
       "username": "anguyen",

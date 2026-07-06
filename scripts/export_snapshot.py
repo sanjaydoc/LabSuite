@@ -94,6 +94,8 @@ def main() -> None:
         "saas_role_apps": dict(SAAS_ROLE_APPS),
         "compliance_records": cp.compliance.all_records(),
         "operations": cp.ops.to_dict(),
+        "all_groups": sorted({g.name for g in cp.ad.groups.values()} | set(cp.okta.groups)),
+        "requests": cp.requests.to_dict()["requests"],
         "users": users,
         "ad_nesting": ad_nesting,
         "shares": shares,

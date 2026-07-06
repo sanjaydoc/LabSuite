@@ -239,6 +239,51 @@ def cmd_compliance(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_request(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    try:
+        req = cp.request_access(args.user, args.group, args.why or "")
+    except KeyError as exc:
+        raise SystemExit(str(exc)) from exc
+    print(f"{_c(req.id, CYAN)} — {args.user} requests {args.group} {DIM}({req.status}){RESET}")
+    _save(cp, args.state)
+    return 0
+
+
+def cmd_requests(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    _header("Access requests")
+    for r in cp.requests.all():
+        colour = GREEN if r.status == "approved" else RED if r.status == "denied" else CYAN
+        by = f" by {r.decided_by}" if r.decided_by else ""
+        print(f"  {r.id}  {r.requester:10} -> {r.group:18} {_c(r.status, colour)}{by}  {DIM}{r.justification}{RESET}")
+    if not cp.requests.requests:
+        print(f"  {DIM}(no requests){RESET}")
+    return 0
+
+
+def cmd_approve(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    try:
+        req = cp.approve_request(args.id)
+    except KeyError as exc:
+        raise SystemExit(str(exc)) from exc
+    print(f"{req.id}: {_c('approved', GREEN)} — {req.requester} granted {req.group}")
+    _save(cp, args.state)
+    return 0
+
+
+def cmd_deny(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    try:
+        req = cp.deny_request(args.id, note=args.note or "")
+    except KeyError as exc:
+        raise SystemExit(str(exc)) from exc
+    print(f"{req.id}: {_c('denied', RED)}")
+    _save(cp, args.state)
+    return 0
+
+
 def cmd_devices(args: argparse.Namespace) -> int:
     cp = _load_or_build(args.state)
     _header("Managed device fleet")
@@ -473,6 +518,24 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_check)
 
     sub.add_parser("review", help="quarterly access review with anomaly flags").set_defaults(func=cmd_review)
+
+    p = sub.add_parser("request", help="request access to a group")
+    p.add_argument("--user", required=True)
+    p.add_argument("--group", required=True)
+    p.add_argument("--why", help="justification")
+    p.set_defaults(func=cmd_request)
+
+    sub.add_parser("requests", help="list access requests").set_defaults(func=cmd_requests)
+
+    p = sub.add_parser("approve", help="approve an access request")
+    p.add_argument("--id", required=True)
+    p.set_defaults(func=cmd_approve)
+
+    p = sub.add_parser("deny", help="deny an access request")
+    p.add_argument("--id", required=True)
+    p.add_argument("--note")
+    p.set_defaults(func=cmd_deny)
+
     sub.add_parser("devices", help="list the managed laptop fleet").set_defaults(func=cmd_devices)
     sub.add_parser("compliance", help="show training records").set_defaults(func=cmd_compliance)
 

@@ -53,6 +53,8 @@ class DemoEngine {
     this.inventory = ops.inventory || [];
     this.vendors = ops.vendors || [];
     this.safety = ops.safety || [];
+    this.requests = (data.requests || []).map((r) => ({ ...r }));
+    this.reqCounter = this._maxReq();
   }
 
   // ---- compliance ---------------------------------------------------
@@ -127,6 +129,35 @@ class DemoEngine {
     if (v) { v.renewal_in_days = 365; this.log("operations", "vendor.renew", name, "success"); }
     return v;
   }
+  // ---- access requests + approvals ---------------------------------
+  requestAccess(user, group, justification) {
+    this.reqCounter = (this.reqCounter || this._maxReq()) + 1;
+    const req = { id: "REQ-" + String(this.reqCounter).padStart(4, "0"), requester: user, group,
+      justification: justification || "", status: "pending", decided_by: "", note: "" };
+    this.requests.push(req);
+    this.log(user, "access.request", `${req.id}:${group}`, "success", justification || "");
+    return req;
+  }
+  _maxReq() {
+    return this.requests.reduce((m, r) => Math.max(m, parseInt(r.id.replace(/\D/g, ""), 10) || 0), 0);
+  }
+  approveRequest(id) {
+    const r = this.requests.find((x) => x.id === id);
+    if (!r || r.status !== "pending") return r;
+    const u = this.users[r.requester];
+    if (u && !u.okta_groups.includes(r.group)) u.okta_groups.push(r.group);
+    r.status = "approved"; r.decided_by = "it-admin";
+    this.log("it-admin", "request.approve", `${r.id}:${r.group}`, "success", `granted ${r.group} to ${r.requester}`);
+    return r;
+  }
+  denyRequest(id, note) {
+    const r = this.requests.find((x) => x.id === id);
+    if (!r || r.status !== "pending") return r;
+    r.status = "denied"; r.decided_by = "it-admin"; r.note = note || "";
+    this.log("it-admin", "request.deny", `${r.id}:${r.group}`, "denied", note || "");
+    return r;
+  }
+
   grantSaasSeat(username, app) {
     (this.saas[app] ||= { name: app, cost: (this.d.saas_catalog || {})[app] || 0, assignees: new Set() }).assignees.add(username);
     this.log("saas", "saas.grant", username, "success", app);
@@ -370,6 +401,10 @@ const demoBackend = {
   async renewVendor(name) { engine.renewVendor(name); },
   async grantSaasSeat(u, app) { engine.grantSaasSeat(u, app); },
   async revokeSaasSeat(u, app) { engine.revokeSaasSeat(u, app); },
+  async requestsList() { return engine.requests.slice(); },
+  async createRequest(u, g, j) { engine.requestAccess(u, g, j); },
+  async approveRequest(id) { engine.approveRequest(id); },
+  async denyRequest(id, note) { engine.denyRequest(id, note); },
   async usernames() { return Object.keys(engine.users).sort(); },
 };
 
@@ -426,6 +461,10 @@ const liveBackend = {
   async renewVendor(name) { await this._post("/vendors/renew", { name }); },
   async grantSaasSeat(u, app) { await this._post("/saas/grant", { username: u, app_name: app }); },
   async revokeSaasSeat(u, app) { await this._post("/saas/revoke", { username: u, app_name: app }); },
+  async requestsList() { try { return (await this._json("/requests")).requests; } catch { return []; } },
+  async createRequest(u, g, j) { await this._post("/requests", { requester: u, group: g, justification: j }); },
+  async approveRequest(id) { await this._post("/requests/approve", { request_id: id }); },
+  async denyRequest(id, note) { await this._post("/requests/deny", { request_id: id, note }); },
   async usernames() {
     try { return (await this._json("/scim/v2/Users")).Resources.map((u) => u.userName).sort(); }
     catch { return Object.keys(engine.users).sort(); }
@@ -666,6 +705,34 @@ async function renderAudit() {
     </div>`).join("") : '<div class="muted">No events yet — try onboarding or a decision, then return here.</div>';
 }
 
+async function renderRequests() {
+  const [reqs, users] = await Promise.all([backend.requestsList(), backend.usernames()]);
+  const groups = (D.all_groups || []).filter((g) => g !== "Everyone");
+  const statusChip = (s) => s === "approved" ? '<span class="chip allow">approved</span>'
+    : s === "denied" ? '<span class="chip deny">denied</span>' : '<span class="chip">pending</span>';
+  const rows = reqs.slice().sort((a, b) => b.id.localeCompare(a.id)).map((r) => {
+    const actions = r.status === "pending"
+      ? `${_actBtn("approve", `data-id="${esc(r.id)}"`, "approve")} ${_actBtn("deny", `data-id="${esc(r.id)}"`, "deny")}`
+      : `<span class="muted">${esc(r.decided_by || "")}</span>`;
+    return `<tr><td>${esc(r.id)}</td><td>${esc(r.requester)}</td><td><span class="tag">${esc(r.group)}</span></td>
+      <td class="muted">${esc(r.justification || "")}</td><td>${statusChip(r.status)}</td><td>${actions}</td></tr>`;
+  }).join("") || `<tr><td colspan="6" class="muted">No requests yet — file one below.</td></tr>`;
+  byId("req-table").innerHTML =
+    `<tr><th>ID</th><th>Requester</th><th>Group</th><th>Justification</th><th>Status</th><th></th></tr>${rows}`;
+  byId("req-user").innerHTML = users.map((u) => `<option>${esc(u)}</option>`).join("");
+  byId("req-group").innerHTML = groups.map((g) => `<option>${esc(g)}</option>`).join("");
+  $$("#req-table button.act").forEach((b) => b.onclick = async () => {
+    if (b.dataset.act === "approve") await backend.approveRequest(b.dataset.id);
+    else await backend.denyRequest(b.dataset.id, "");
+    renderRequests();
+  });
+  byId("req-submit").onclick = async () => {
+    await backend.createRequest(byId("req-user").value, byId("req-group").value, byId("req-why").value);
+    byId("req-why").value = "";
+    renderRequests();
+  };
+}
+
 async function renderCompliance() {
   const records = await backend.complianceRecords();
   const trainings = ["Data-Handling", "Biosafety", "Chemical-Safety", "IACUC"];
@@ -810,6 +877,7 @@ const RENDERERS = {
   overview: renderOverview, directory: renderDirectory, explorer: renderExplorer,
   review: renderReview, audit: renderAudit, architecture: renderArchitecture,
   devices: renderDevices, compliance: renderCompliance, saas: renderSaas, ops: renderOps,
+  requests: renderRequests,
 };
 
 function go(view) {

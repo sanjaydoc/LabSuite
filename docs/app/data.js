@@ -4,43 +4,73 @@
 window.LABSUITE_DATA = {
   "demo_password": "Winter-Harbor-2026",
   "departments": [
-    "Research",
+    "Bio",
+    "In-Vivo",
+    "Delivery",
     "Platform",
+    "Data-Science",
     "Lab",
-    "Operations",
+    "Lab-Ops",
+    "Compliance",
+    "Facilities",
     "Legal",
-    "People",
-    "Security",
     "IT"
   ],
   "baseline_group": "Everyone",
   "department_group": {
-    "Research": "Research",
+    "Bio": "Bio",
+    "In-Vivo": "In-Vivo",
+    "Delivery": "Delivery",
     "Platform": "Platform",
+    "Data-Science": "Data-Science",
     "Lab": "Lab",
-    "Operations": "Operations",
+    "Lab-Ops": "Lab-Ops",
+    "Compliance": "Compliance",
+    "Facilities": "Facilities",
     "Legal": "Legal",
-    "People": "People",
-    "Security": "Security",
     "IT": "IT"
   },
   "role_blueprints": {
-    "research-scientist": {
-      "description": "Runs experiments; research storage + GPU training VMs (via Research nesting).",
+    "ml-scientist": {
+      "description": "ML research; GPU cluster + model-artifact storage (GPU via Data-Science nesting).",
       "extra_groups": []
     },
-    "lab-technician": {
-      "description": "Operates lab hardware and data acquisition (via Lab nesting).",
+    "research-scientist": {
+      "description": "Bench scientist (cell bio / protein eng / immuno); ELN + sequencing/imaging.",
+      "extra_groups": []
+    },
+    "invivo-scientist": {
+      "description": "In-vivo studies; IACUC-gated study data + surgical scheduling.",
+      "extra_groups": []
+    },
+    "vector-core": {
+      "description": "AAV vector core; vector-core LIMS + lot-record storage.",
       "extra_groups": []
     },
     "platform-engineer": {
-      "description": "Builds infra; adds CI operation on top of Platform.",
+      "description": "Research-platform automation; instrument/CI VMs (GPU via Platform nesting).",
       "extra_groups": [
         "CI-Operators"
       ]
     },
-    "operations": {
-      "description": "Business operations; standard storage only.",
+    "lab-technician": {
+      "description": "Histology / bench tech; slide + imaging storage.",
+      "extra_groups": [
+        "Histology"
+      ]
+    },
+    "lab-ops": {
+      "description": "Lab operations; asset DB, inventory, procurement (no research data).",
+      "extra_groups": []
+    },
+    "compliance": {
+      "description": "IACUC coordinator; read-only across study data + the training system.",
+      "extra_groups": [
+        "Compliance-Read"
+      ]
+    },
+    "facilities": {
+      "description": "Facilities & workplace ops; no research data.",
       "extra_groups": []
     },
     "legal-counsel": {
@@ -48,10 +78,6 @@ window.LABSUITE_DATA = {
       "extra_groups": [
         "Legal-Privileged"
       ]
-    },
-    "security-analyst": {
-      "description": "Security; read-only audit across the estate.",
-      "extra_groups": []
     },
     "it-admin": {
       "description": "IT administrator / admin of record; broad administrative access.",
@@ -140,12 +166,16 @@ window.LABSUITE_DATA = {
     }
   },
   "role_image": {
+    "ml-scientist": "mac-standard",
     "research-scientist": "mac-standard",
+    "invivo-scientist": "mac-standard",
+    "vector-core": "mac-standard",
     "platform-engineer": "mac-standard",
-    "operations": "mac-standard",
-    "legal-counsel": "mac-standard",
-    "security-analyst": "mac-standard",
     "lab-technician": "win-lab",
+    "lab-ops": "win-lab",
+    "compliance": "mac-standard",
+    "facilities": "mac-standard",
+    "legal-counsel": "mac-standard",
     "it-admin": "mac-admin"
   },
   "users": [
@@ -153,12 +183,12 @@ window.LABSUITE_DATA = {
       "username": "anguyen",
       "display_name": "Alice Nguyen",
       "email": "anguyen@lab.local",
-      "department": "Research",
-      "title": "Research Scientist",
+      "department": "Bio",
+      "title": "Scientist \u2013 Cell Biology",
       "active": true,
       "okta_groups": [
-        "Everyone",
-        "Research"
+        "Bio",
+        "Everyone"
       ]
     },
     {
@@ -166,7 +196,7 @@ window.LABSUITE_DATA = {
       "display_name": "Bob Okafor",
       "email": "bokafor@lab.local",
       "department": "Platform",
-      "title": "Platform Engineer",
+      "title": "Automation Engineer",
       "active": true,
       "okta_groups": [
         "CI-Operators",
@@ -179,23 +209,24 @@ window.LABSUITE_DATA = {
       "display_name": "Carol Diaz",
       "email": "cdiaz@lab.local",
       "department": "Lab",
-      "title": "Lab Technician",
+      "title": "Histology Technician",
       "active": true,
       "okta_groups": [
         "Everyone",
+        "Histology",
         "Lab"
       ]
     },
     {
-      "username": "dlevy",
-      "display_name": "Dan Levy",
-      "email": "dlevy@lab.local",
-      "department": "Operations",
-      "title": "Operations Coordinator",
+      "username": "drao",
+      "display_name": "Dev Rao",
+      "email": "drao@lab.local",
+      "department": "Delivery",
+      "title": "Research Associate \u2013 Vector Core",
       "active": true,
       "okta_groups": [
-        "Everyone",
-        "Operations"
+        "Delivery",
+        "Everyone"
       ]
     },
     {
@@ -212,27 +243,88 @@ window.LABSUITE_DATA = {
       ]
     },
     {
-      "username": "fito",
-      "display_name": "Frank Ito",
-      "email": "fito@lab.local",
-      "department": "Security",
-      "title": "Security Analyst",
+      "username": "freed",
+      "display_name": "Fiona Reed",
+      "email": "freed@lab.local",
+      "department": "Facilities",
+      "title": "Facilities Operations",
       "active": true,
       "okta_groups": [
         "Everyone",
-        "Security"
+        "Facilities"
       ]
     },
     {
       "username": "gkim",
       "display_name": "Grace Kim",
       "email": "gkim@lab.local",
-      "department": "Research",
-      "title": "Research Scientist",
+      "department": "Bio",
+      "title": "Scientist \u2013 Protein Engineering",
+      "active": true,
+      "okta_groups": [
+        "Bio",
+        "Everyone"
+      ]
+    },
+    {
+      "username": "ipetrov",
+      "display_name": "Ivan Petrov",
+      "email": "ipetrov@lab.local",
+      "department": "Compliance",
+      "title": "IACUC Coordinator",
+      "active": true,
+      "okta_groups": [
+        "Compliance",
+        "Compliance-Read",
+        "Everyone"
+      ]
+    },
+    {
+      "username": "lpark",
+      "display_name": "Lena Park",
+      "email": "lpark@lab.local",
+      "department": "Lab-Ops",
+      "title": "Lab Operations Associate",
       "active": true,
       "okta_groups": [
         "Everyone",
-        "Research"
+        "Lab-Ops"
+      ]
+    },
+    {
+      "username": "mchen",
+      "display_name": "Mei Chen",
+      "email": "mchen@lab.local",
+      "department": "Data-Science",
+      "title": "ML Research Scientist \u2013 Bayesian Optimization",
+      "active": true,
+      "okta_groups": [
+        "Data-Science",
+        "Everyone"
+      ]
+    },
+    {
+      "username": "nosei",
+      "display_name": "Nadia Osei",
+      "email": "nosei@lab.local",
+      "department": "In-Vivo",
+      "title": "Research Associate \u2013 In Vivo",
+      "active": true,
+      "okta_groups": [
+        "Everyone",
+        "In-Vivo"
+      ]
+    },
+    {
+      "username": "rpatel",
+      "display_name": "Ravi Patel",
+      "email": "rpatel@lab.local",
+      "department": "Data-Science",
+      "title": "ML Research Scientist \u2013 De Novo Design",
+      "active": true,
+      "okta_groups": [
+        "Data-Science",
+        "Everyone"
       ]
     },
     {
@@ -247,26 +339,69 @@ window.LABSUITE_DATA = {
         "Everyone",
         "IT"
       ]
+    },
+    {
+      "username": "talvarez",
+      "display_name": "Tom Alvarez",
+      "email": "talvarez@lab.local",
+      "department": "In-Vivo",
+      "title": "Scientist \u2013 In Vivo Operations",
+      "active": true,
+      "okta_groups": [
+        "Everyone",
+        "In-Vivo"
+      ]
     }
   ],
   "ad_nesting": {
+    "Research": [
+      "Bio",
+      "Data-Science",
+      "Delivery",
+      "In-Vivo",
+      "Platform"
+    ],
     "GPU-Cluster-Users": [
-      "Platform",
-      "Research"
+      "Data-Science",
+      "Platform"
     ],
     "Lab-DAQ-Operators": [
       "Lab"
     ]
   },
   "shares": {
+    "home": {
+      "dataset": "tank/home",
+      "description": "Per-user home directories",
+      "sensitive": false,
+      "acl": {
+        "Everyone": 1
+      }
+    },
     "research-data": {
       "dataset": "tank/research",
       "description": "Shared research datasets",
       "sensitive": false,
       "acl": {
         "Research": 2,
-        "Platform": 1,
         "Domain-Admins": 3
+      }
+    },
+    "eln": {
+      "dataset": "tank/eln",
+      "description": "Electronic lab notebook exports",
+      "sensitive": false,
+      "acl": {
+        "Research": 2
+      }
+    },
+    "sequencing-imaging": {
+      "dataset": "tank/seq",
+      "description": "Sequencing + microscopy data",
+      "sensitive": false,
+      "acl": {
+        "Bio": 2,
+        "Research": 1
       }
     },
     "gpu-scratch": {
@@ -275,6 +410,34 @@ window.LABSUITE_DATA = {
       "sensitive": false,
       "acl": {
         "GPU-Cluster-Users": 2
+      }
+    },
+    "model-artifacts": {
+      "dataset": "tank/models",
+      "description": "Trained model artifacts",
+      "sensitive": false,
+      "acl": {
+        "Data-Science": 2,
+        "Research": 1
+      }
+    },
+    "invivo-study-data": {
+      "dataset": "tank/invivo",
+      "description": "In-vivo study data (IACUC-controlled)",
+      "sensitive": true,
+      "acl": {
+        "In-Vivo": 2,
+        "Compliance-Read": 1,
+        "Domain-Admins": 3
+      }
+    },
+    "vector-core-lims": {
+      "dataset": "tank/vector",
+      "description": "AAV vector-core lot records / LIMS",
+      "sensitive": false,
+      "acl": {
+        "Delivery": 2,
+        "Research": 1
       }
     },
     "lab-raw-signals": {
@@ -289,12 +452,20 @@ window.LABSUITE_DATA = {
     },
     "platform-artifacts": {
       "dataset": "tank/platform",
-      "description": "Build artifacts and images",
+      "description": "Instrument images + build artifacts",
       "sensitive": false,
       "acl": {
         "Platform": 2,
         "CI-Operators": 1,
         "Domain-Admins": 3
+      }
+    },
+    "asset-db": {
+      "dataset": "tank/assets",
+      "description": "Lab-ops asset & inventory database",
+      "sensitive": false,
+      "acl": {
+        "Lab-Ops": 2
       }
     },
     "legal-contracts": {
@@ -303,14 +474,6 @@ window.LABSUITE_DATA = {
       "sensitive": true,
       "acl": {
         "Legal-Privileged": 3
-      }
-    },
-    "home": {
-      "dataset": "tank/home",
-      "description": "Per-user home directories",
-      "sensitive": false,
-      "acl": {
-        "Everyone": 1
       }
     }
   },
@@ -354,7 +517,7 @@ window.LABSUITE_DATA = {
     },
     {
       "path": "/",
-      "group": "Security",
+      "group": "Compliance-Read",
       "role": 1
     },
     {
@@ -402,16 +565,16 @@ window.LABSUITE_DATA = {
       "model": "MacBook Pro 14",
       "platform": "macOS",
       "image": "mac-standard",
-      "assignee": "bokafor",
+      "assignee": "rpatel",
       "status": "assigned",
       "serial": "C02LT0003"
     },
     {
       "asset_tag": "LT-0004",
-      "model": "Dell Latitude 5550",
-      "platform": "Windows",
-      "image": "win-lab",
-      "assignee": "cdiaz",
+      "model": "MacBook Pro 14",
+      "platform": "macOS",
+      "image": "mac-standard",
+      "assignee": "mchen",
       "status": "assigned",
       "serial": "C02LT0004"
     },
@@ -420,7 +583,7 @@ window.LABSUITE_DATA = {
       "model": "MacBook Pro 14",
       "platform": "macOS",
       "image": "mac-standard",
-      "assignee": "dlevy",
+      "assignee": "talvarez",
       "status": "assigned",
       "serial": "C02LT0005"
     },
@@ -429,7 +592,7 @@ window.LABSUITE_DATA = {
       "model": "MacBook Pro 14",
       "platform": "macOS",
       "image": "mac-standard",
-      "assignee": "epark",
+      "assignee": "nosei",
       "status": "assigned",
       "serial": "C02LT0006"
     },
@@ -438,18 +601,72 @@ window.LABSUITE_DATA = {
       "model": "MacBook Pro 14",
       "platform": "macOS",
       "image": "mac-standard",
-      "assignee": "fito",
+      "assignee": "bokafor",
       "status": "assigned",
       "serial": "C02LT0007"
     },
     {
       "asset_tag": "LT-0008",
+      "model": "Dell Latitude 5550",
+      "platform": "Windows",
+      "image": "win-lab",
+      "assignee": "cdiaz",
+      "status": "assigned",
+      "serial": "C02LT0008"
+    },
+    {
+      "asset_tag": "LT-0009",
+      "model": "MacBook Pro 14",
+      "platform": "macOS",
+      "image": "mac-standard",
+      "assignee": "drao",
+      "status": "assigned",
+      "serial": "C02LT0009"
+    },
+    {
+      "asset_tag": "LT-0010",
+      "model": "Dell Latitude 5550",
+      "platform": "Windows",
+      "image": "win-lab",
+      "assignee": "lpark",
+      "status": "assigned",
+      "serial": "C02LT0010"
+    },
+    {
+      "asset_tag": "LT-0011",
+      "model": "MacBook Pro 14",
+      "platform": "macOS",
+      "image": "mac-standard",
+      "assignee": "ipetrov",
+      "status": "assigned",
+      "serial": "C02LT0011"
+    },
+    {
+      "asset_tag": "LT-0012",
+      "model": "MacBook Pro 14",
+      "platform": "macOS",
+      "image": "mac-standard",
+      "assignee": "freed",
+      "status": "assigned",
+      "serial": "C02LT0012"
+    },
+    {
+      "asset_tag": "LT-0013",
+      "model": "MacBook Pro 14",
+      "platform": "macOS",
+      "image": "mac-standard",
+      "assignee": "epark",
+      "status": "assigned",
+      "serial": "C02LT0013"
+    },
+    {
+      "asset_tag": "LT-0014",
       "model": "MacBook Pro 16",
       "platform": "macOS",
       "image": "mac-admin",
       "assignee": "sanbu",
       "status": "assigned",
-      "serial": "C02LT0008"
+      "serial": "C02LT0014"
     }
   ]
 };

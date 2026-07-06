@@ -48,7 +48,7 @@ def test_scim_feed(client):
 def test_onboard_offboard_over_http(client):
     resp = client.post(
         "/admin/onboard",
-        json={"name": "Nadia Rahman", "department": "Research", "role": "research-scientist"},
+        json={"name": "Nadia Rahman", "department": "Bio", "role": "research-scientist"},
     )
     assert resp.status_code == 200
     username = resp.json()["username"]

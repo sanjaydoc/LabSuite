@@ -413,13 +413,13 @@ class ControlPlane:
             for path, role in report.proxmox.items():
                 if role == str(ProxmoxRole.PVE_ADMIN):
                     flags.append(f"{username}: PVEAdmin on {path}")
-            # Compliance flags: lapsed training, and access blocked pending training.
+            # Compliance flag: a lapsed training is a genuine anomaly (access to a
+            # gated resource was silently revoked). Being *blocked pending* training
+            # is correct behaviour, not a flag.
             if user.active:
                 for training, status in report.trainings.items():
                     if status == "expired":
                         flags.append(f"{username}: EXPIRED training {training!r}")
-                for share_name, missing in report.blocked.items():
-                    flags.append(f"{username}: blocked from {share_name!r} (needs {', '.join(missing)})")
         self.audit.record(actor, "access.review", "*", "control-plane", detail=f"{len(flags)} flags")
         return {"entitlements": entitlements, "flags": flags}
 

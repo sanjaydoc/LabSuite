@@ -274,35 +274,40 @@ def cmd_demo(args: argparse.Namespace) -> int:
     print(f"  {len(cp.okta.list_users())} users, {len(cp.okta.list_groups())} Okta groups, "
           f"{len(cp.truenas.list_shares())} TrueNAS shares, {len(cp.proxmox.list_vms())} Proxmox guests")
 
-    _header("2. Onboard a new research scientist")
-    hire = cp.onboard("Nadia Rahman", Department.RESEARCH, "research-scientist", title="Research Scientist")
+    _header("2. Onboard a new in-vivo scientist")
+    hire = cp.onboard("Nadia Rahman", Department.INVIVO, "invivo-scientist", title="In-Vivo Scientist")
     print(f"  created {_c(hire.username, CYAN)} ({hire.email}), temp password {_c(hire.temp_password, CYAN)}")
-    print(f"  Okta groups: {', '.join(hire.okta_groups)}")
+    print(f"  Okta groups: {', '.join(hire.okta_groups)}  {DIM}(In-Vivo -> Research via AD nesting){RESET}")
     print(f"  -> TrueNAS: {hire.truenas_access}")
-    print(f"  -> Proxmox: {hire.proxmox_access}")
-    print(f"  {DIM}note: GPU access came from AD nesting (Research is nested in GPU-Cluster-Users),"
-          f" not a per-user grant.{RESET}")
+    if hire.device:
+        img = IMAGE_CATALOG[hire.device["image"]]
+        print(f"  -> Device: {hire.device['model']} · {hire.device['image']} · {img.security_summary()}")
+    print(f"  -> Training required (pending): {', '.join(hire.trainings)}")
+    for share, missing in hire.gated.items():
+        print(f"     {_c('gated', RED)} {share} until {', '.join(missing)} complete")
 
     _header("3. She logs in through Okta")
     cp.okta.set_password(hire.username, DEMO_PASSWORD)
     token = cp.login(hire.username, DEMO_PASSWORD)
     print(f"  {_c('authenticated', GREEN)}; session JWT {token[:40]}...")
 
-    _header("4. Access decisions (resolved Okta -> AD -> resource)")
+    _header("4. Access decisions (resolved Okta -> AD -> compliance -> resource)")
     checks = [
-        ("proxmox", 101, "vm.power", "start her training VM"),
-        ("proxmox", 101, "vm.migrate", "migrate it (needs admin)"),
         ("truenas", "research-data", "modify", "write research data"),
+        ("truenas", "invivo-study-data", "modify", "write in-vivo study data"),
         ("truenas", "legal-contracts", "read", "read legal contracts"),
     ]
-    for system, resource, action, note in checks:
-        if system == "proxmox":
-            d = cp.check_proxmox(hire.username, int(resource), action)
-        else:
-            d = cp.check_truenas(hire.username, str(resource), action)
+    for _system, resource, action, note in checks:
+        d = cp.check_truenas(hire.username, str(resource), action)
         print(f"  {_yes_no(d.allowed):22} {note:32} {DIM}({d.reason}){RESET}")
 
-    _header("5. Offboard her -- same-day, verified")
+    _header("5. Compliance gate: she completes IACUC + biosafety training")
+    cp.complete_training(hire.username, "IACUC")
+    cp.complete_training(hire.username, "Biosafety")
+    d = cp.check_truenas(hire.username, "invivo-study-data", "modify")
+    print(f"  {_yes_no(d.allowed):22} {'in-vivo study data (now trained)':32} {DIM}({d.reason}){RESET}")
+
+    _header("6. Offboard her -- same-day, verified")
     off = cp.offboard(hire.username)
     verdict = _c("CLEAN: zero residual access", GREEN) if off.clean else _c("RESIDUAL!", RED)
     print(f"  deprovisioned across Okta + AD + downstream -> {verdict}")
@@ -313,13 +318,13 @@ def cmd_demo(args: argparse.Namespace) -> int:
     except PermissionError:
         print(_c("correctly rejected", GREEN))
 
-    _header("6. Quarterly access review")
+    _header("7. Quarterly access review")
     review = cp.access_review()
     print(f"  reviewed {len(review['entitlements'])} identities; {len(review['flags'])} flag(s):")
-    for flag in review["flags"]:
+    for flag in review["flags"][:6]:
         print(f"    {_c('!', RED)} {flag}")
 
-    _header("7. Everything above was audited")
+    _header("8. Everything above was audited")
     print(f"  {len(cp.audit.events)} audit events recorded. Last few:")
     for event in cp.audit.tail(5):
         print(f"    {DIM}{event.system:12} {event.action:16} {event.target:20} {event.outcome}{RESET}")

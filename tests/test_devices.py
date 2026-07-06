@@ -8,7 +8,7 @@ from labsuite.seed import build_lab
 
 def test_onboard_images_a_mac_for_research():
     cp = build_lab()
-    r = cp.onboard("Nadia Rahman", Department.RESEARCH, "research-scientist")
+    r = cp.onboard("Nadia Rahman", Department.BIO, "research-scientist")
     assert r.device is not None
     assert r.device["image"] == "mac-standard"
     assert r.device["platform"] == "macOS"
@@ -31,7 +31,7 @@ def test_it_admin_gets_admin_build():
 
 def test_offboard_flags_device_wipe_and_return():
     cp = build_lab()
-    r = cp.onboard("Nadia Rahman", Department.RESEARCH, "research-scientist")
+    r = cp.onboard("Nadia Rahman", Department.BIO, "research-scientist")
     tag = r.device["asset_tag"]
     off = cp.offboard(r.username)
     assert off.device is not None
@@ -45,7 +45,7 @@ def test_offboard_flags_device_wipe_and_return():
 def test_seeded_fleet_has_one_device_per_hire():
     cp = build_lab()
     devices = cp.endpoints.list_devices()
-    assert len(devices) == 8  # one per seeded person
+    assert len(devices) == 14  # one per seeded person
     assert all(d.assignee for d in devices)
 
 

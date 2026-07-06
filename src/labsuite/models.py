@@ -12,15 +12,23 @@ from enum import Enum, IntEnum
 
 
 class Department(str, Enum):
-    """Org departments -- drive the default group assignments in ``policy.py``."""
+    """Merge Labs functional teams -- drive default group assignments (policy.py).
 
-    RESEARCH = "Research"
-    PLATFORM = "Platform"
-    LAB = "Lab"
-    OPERATIONS = "Operations"
+    Bioengineering splits into functional teams (Bio, In-Vivo, Delivery,
+    Platform, Data-Science); the rest are G&A (Lab-Ops, Compliance, Facilities,
+    Legal, IT). Each value is the team's base AD/Okta group name.
+    """
+
+    BIO = "Bio"  # molecular tech: cell bio, protein eng, immuno, histology
+    INVIVO = "In-Vivo"  # rodent surgery / in-vivo studies
+    DELIVERY = "Delivery"  # AAV vector core
+    PLATFORM = "Platform"  # research platform / automation
+    DATA_SCIENCE = "Data-Science"  # ML research
+    LAB = "Lab"  # bench lab / histology
+    LAB_OPS = "Lab-Ops"  # lab operations, equipment, procurement
+    COMPLIANCE = "Compliance"  # IACUC / animal-research compliance
+    FACILITIES = "Facilities"  # facilities & workplace ops
     LEGAL = "Legal"
-    PEOPLE = "People"
-    SECURITY = "Security"
     IT = "IT"
 
 

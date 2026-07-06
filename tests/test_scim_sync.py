@@ -8,7 +8,7 @@ from labsuite.scim import ScimSync
 
 def _fixture():
     okta = OktaDirectory()
-    okta.create_user("anguyen", "Alice Nguyen", "a@lab.local", Department.RESEARCH, "pw")
+    okta.create_user("anguyen", "Alice Nguyen", "a@lab.local", Department.BIO, "pw")
     okta.create_user("bokafor", "Bob Okafor", "b@lab.local", Department.PLATFORM, "pw")
     okta.ensure_group("Research")
     okta.add_to_group("anguyen", "Research")

@@ -6,7 +6,7 @@ from labsuite.models import Department, User
 
 def _ad_with(username: str, *direct_groups: str) -> ActiveDirectory:
     ad = ActiveDirectory()
-    ad.upsert_user(User(username, username.title(), f"{username}@lab.local", Department.RESEARCH))
+    ad.upsert_user(User(username, username.title(), f"{username}@lab.local", Department.BIO))
     for g in direct_groups:
         ad.set_group_members(g, {username})
     return ad

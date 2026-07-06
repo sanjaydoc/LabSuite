@@ -9,20 +9,20 @@ def test_seeded_user_login_and_access():
     token = cp.login("anguyen", DEMO_PASSWORD)
     claims = verify_token(token, cp.okta.signing_secret)
     assert claims["sub"] == "anguyen"
-    assert "Research" in claims["groups"]
+    assert "Bio" in claims["groups"]  # her Okta team group
 
     report = cp.resolve_access("anguyen")
     assert report.active
-    assert "GPU-Cluster-Users" in report.ad_effective_groups  # via nesting
+    assert "Research" in report.ad_effective_groups  # Bio nested into Research
     assert report.truenas.get("research-data") == "modify"
 
 
 def test_allow_and_deny_decisions():
     cp = build_lab()
-    # A researcher can power a research VM but not migrate it.
-    assert cp.check_proxmox("anguyen", 101, "vm.power").allowed
-    assert not cp.check_proxmox("anguyen", 101, "vm.migrate").allowed
-    # ...and cannot read the sensitive legal share.
+    # An ML scientist can power a research VM but not migrate it.
+    assert cp.check_proxmox("rpatel", 101, "vm.power").allowed
+    assert not cp.check_proxmox("rpatel", 101, "vm.migrate").allowed
+    # A bench scientist cannot read the sensitive legal share.
     assert not cp.check_truenas("anguyen", "legal-contracts", "read").allowed
     # Legal counsel can.
     assert cp.check_truenas("epark", "legal-contracts", "read").allowed
@@ -44,7 +44,8 @@ def test_access_review_flags_sensitive_and_admin():
 
 def test_department_isolation():
     cp = build_lab()
-    # Operations gets only baseline storage, no research/lab/compute.
-    report = cp.resolve_access("dlevy")
+    # Lab-ops gets only its asset DB — no research data, no compute.
+    report = cp.resolve_access("lpark")
     assert report.proxmox == {}
     assert "research-data" not in report.truenas
+    assert report.truenas.get("asset-db") == "modify"

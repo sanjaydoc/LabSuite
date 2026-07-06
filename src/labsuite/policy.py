@@ -17,17 +17,8 @@ from labsuite.models import Department, DeviceImage
 # enforcement, etc. in a real Okta org).
 BASELINE_GROUP = "Everyone"
 
-# Department -> the Okta group that represents "works in this department".
-DEPARTMENT_GROUP: dict[Department, str] = {
-    Department.RESEARCH: "Research",
-    Department.PLATFORM: "Platform",
-    Department.LAB: "Lab",
-    Department.OPERATIONS: "Operations",
-    Department.LEGAL: "Legal",
-    Department.PEOPLE: "People",
-    Department.SECURITY: "Security",
-    Department.IT: "IT",
-}
+# Department -> the Okta group that represents "works in this team".
+DEPARTMENT_GROUP: dict[Department, str] = {dept: dept.value for dept in Department}
 
 
 @dataclass(frozen=True)
@@ -46,31 +37,49 @@ class RoleBlueprint:
 # ``seed.build_lab``), so a researcher gets GPU access by virtue of being in
 # Research -- no per-user grant to maintain. That is the whole point of AD nesting.
 ROLE_BLUEPRINTS: dict[str, RoleBlueprint] = {
+    "ml-scientist": RoleBlueprint(
+        "ml-scientist",
+        "ML research; GPU cluster + model-artifact storage (GPU via Data-Science nesting).",
+    ),
     "research-scientist": RoleBlueprint(
         "research-scientist",
-        "Runs experiments; research storage + GPU training VMs (via Research nesting).",
+        "Bench scientist (cell bio / protein eng / immuno); ELN + sequencing/imaging.",
     ),
-    "lab-technician": RoleBlueprint(
-        "lab-technician",
-        "Operates lab hardware and data acquisition (via Lab nesting).",
+    "invivo-scientist": RoleBlueprint(
+        "invivo-scientist",
+        "In-vivo studies; IACUC-gated study data + surgical scheduling.",
+    ),
+    "vector-core": RoleBlueprint(
+        "vector-core",
+        "AAV vector core; vector-core LIMS + lot-record storage.",
     ),
     "platform-engineer": RoleBlueprint(
         "platform-engineer",
-        "Builds infra; adds CI operation on top of Platform.",
+        "Research-platform automation; instrument/CI VMs (GPU via Platform nesting).",
         extra_groups=("CI-Operators",),
     ),
-    "operations": RoleBlueprint(
-        "operations",
-        "Business operations; standard storage only.",
+    "lab-technician": RoleBlueprint(
+        "lab-technician",
+        "Histology / bench tech; slide + imaging storage.",
+        extra_groups=("Histology",),
+    ),
+    "lab-ops": RoleBlueprint(
+        "lab-ops",
+        "Lab operations; asset DB, inventory, procurement (no research data).",
+    ),
+    "compliance": RoleBlueprint(
+        "compliance",
+        "IACUC coordinator; read-only across study data + the training system.",
+        extra_groups=("Compliance-Read",),
+    ),
+    "facilities": RoleBlueprint(
+        "facilities",
+        "Facilities & workplace ops; no research data.",
     ),
     "legal-counsel": RoleBlueprint(
         "legal-counsel",
         "Legal; access to the (sensitive) contracts share.",
         extra_groups=("Legal-Privileged",),
-    ),
-    "security-analyst": RoleBlueprint(
-        "security-analyst",
-        "Security; read-only audit across the estate.",
     ),
     "it-admin": RoleBlueprint(
         "it-admin",
@@ -141,12 +150,16 @@ IMAGE_CATALOG: dict[str, DeviceImage] = {
 # Role -> image. Lab-facing Windows systems get win-lab; IT gets the admin build;
 # everyone else gets the standard managed Mac.
 ROLE_IMAGE: dict[str, str] = {
+    "ml-scientist": "mac-standard",
     "research-scientist": "mac-standard",
+    "invivo-scientist": "mac-standard",
+    "vector-core": "mac-standard",
     "platform-engineer": "mac-standard",
-    "operations": "mac-standard",
-    "legal-counsel": "mac-standard",
-    "security-analyst": "mac-standard",
     "lab-technician": "win-lab",
+    "lab-ops": "win-lab",
+    "compliance": "mac-standard",
+    "facilities": "mac-standard",
+    "legal-counsel": "mac-standard",
     "it-admin": "mac-admin",
 }
 
@@ -176,12 +189,16 @@ GATED_SHARES: dict[str, list[str]] = {
 # Trainings a role must hold. Assigned pending (missing) at onboarding -- a new
 # hire completes them before gated access unlocks.
 ROLE_TRAININGS: dict[str, list[str]] = {
-    "research-scientist": ["Data-Handling", "Biosafety", "IACUC"],
+    "ml-scientist": ["Data-Handling"],
+    "research-scientist": ["Data-Handling", "Biosafety"],
+    "invivo-scientist": ["Data-Handling", "Biosafety", "IACUC"],
+    "vector-core": ["Data-Handling", "Biosafety"],
     "platform-engineer": ["Data-Handling"],
     "lab-technician": ["Biosafety", "Chemical-Safety"],
-    "operations": ["Data-Handling"],
+    "lab-ops": ["Chemical-Safety"],
+    "compliance": ["Data-Handling", "Biosafety", "IACUC"],
+    "facilities": ["Chemical-Safety"],
     "legal-counsel": ["Data-Handling"],
-    "security-analyst": ["Data-Handling"],
     "it-admin": ["Data-Handling"],
 }
 

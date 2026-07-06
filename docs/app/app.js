@@ -45,6 +45,8 @@ class DemoEngine {
     this.trainings = {};
     for (const u in data.compliance_records || {}) this.trainings[u] = { ...data.compliance_records[u] };
     this.gated = data.gated_shares || {};
+    // MFA (Okta Verify) enrollment -- conditional access on sensitive shares
+    this.mfa = new Set(data.mfa_enrolled || []);
     // operations: SaaS + registries
     const ops = data.operations || {};
     this.saas = {};
@@ -72,6 +74,14 @@ class DemoEngine {
     this.log("compliance", "training.expire", username, "denied", training);
   }
   trainingsFor(username) { return { ...(this.trainings[username] || {}) }; }
+
+  // ---- MFA / conditional access -------------------------------------
+  isMfaEnrolled(username) { return this.mfa.has(username); }
+  enrollMfa(username) {
+    if (!this.users[username]) throw new Error(`no such user ${username}`);
+    this.mfa.add(username);
+    this.log("okta", "mfa.enroll", username, "success", "Okta Verify");
+  }
 
   // ---- SaaS ---------------------------------------------------------
   saasAppsForRole(role) {
@@ -229,11 +239,13 @@ class DemoEngine {
     const u = this.users[username];
     const active = !!(u && u.active);
     const groups = this.effectiveGroups(u);
+    const mfa = this.isMfaEnrolled(username);
     const truenas = {}, proxmox = {}, blocked = {};
     for (const s in this.d.shares) {
       const r = this.truenasLevel(s, groups);
       if (r.level <= 0) continue;
-      const missing = active ? this.missingForShare(username, s) : [];
+      let missing = active ? this.missingForShare(username, s) : [];
+      if (active && this.d.shares[s].sensitive && !mfa) missing = [...missing, "MFA (Okta Verify)"];
       if (missing.length) blocked[s] = missing;
       else truenas[s] = r.name;
     }
@@ -246,6 +258,7 @@ class DemoEngine {
       ad_effective_groups: [...groups].sort(), nested,
       truenas, proxmox,
       trainings: this.trainingsFor(username), blocked,
+      mfa_enrolled: mfa,
     };
   }
 
@@ -303,8 +316,10 @@ class DemoEngine {
     const r = this.truenasLevel(share, groups);
     let allowed = r.level >= required;
     const missing = this.missingForShare(username, share);
+    const needsMfa = this.d.shares[share] && this.d.shares[share].sensitive && !this.isMfaEnrolled(username);
     let reason;
     if (allowed && missing.length) { allowed = false; reason = `BLOCKED — training not current: ${missing.join(", ")}`; }
+    else if (allowed && needsMfa) { allowed = false; reason = "BLOCKED — conditional access: MFA (Okta Verify) required for sensitive data"; }
     else if (allowed) reason = `granted via ${r.via.join(", ")}`;
     else reason = "no group grants sufficient access";
     this.log(username, "access.check", `truenas:${share}`, allowed ? "success" : "denied", `${action} -> ${r.name}`);
@@ -405,6 +420,7 @@ const demoBackend = {
   async createRequest(u, g, j) { engine.requestAccess(u, g, j); },
   async approveRequest(id) { engine.approveRequest(id); },
   async denyRequest(id, note) { engine.denyRequest(id, note); },
+  async enrollMfa(u) { engine.enrollMfa(u); },
   async usernames() { return Object.keys(engine.users).sort(); },
 };
 
@@ -465,6 +481,7 @@ const liveBackend = {
   async createRequest(u, g, j) { await this._post("/requests", { requester: u, group: g, justification: j }); },
   async approveRequest(id) { await this._post("/requests/approve", { request_id: id }); },
   async denyRequest(id, note) { await this._post("/requests/deny", { request_id: id, note }); },
+  async enrollMfa(u) { await this._post("/mfa/enroll", { username: u }); },
   async usernames() {
     try { return (await this._json("/scim/v2/Users")).Resources.map((u) => u.userName).sort(); }
     catch { return Object.keys(engine.users).sort(); }
@@ -505,15 +522,24 @@ function accessTables(a) {
 function explorerCompliance(a) {
   const trainings = a.trainings || {};
   const blocked = a.blocked || {};
-  if (!Object.keys(trainings).length && !Object.keys(blocked).length) return "";
+  // Conditional access — MFA (Okta Verify) enrollment.
+  const mfaChip = a.mfa_enrolled
+    ? '<span class="chip allow">● enrolled</span>'
+    : `<span class="chip deny">● not enrolled</span> ${_actBtn("mfa", `data-user="${esc(a.username)}"`, "enroll MFA")}`;
+  const mfaBlock = `<hr class="divider" /><div class="label">Conditional access</div>
+    <div class="tags" style="margin:.3rem 0 .2rem"><span class="k" style="margin-right:.4rem">MFA (Okta Verify)</span>${mfaChip}</div>
+    <p class="muted" style="font-size:.8rem;margin:.1rem 0 0">Sensitive shares require MFA regardless of group membership.</p>`;
   const tchips = Object.entries(trainings).map(([t, s]) => {
     const cls = s === "current" ? "allow" : s === "expired" ? "deny" : "";
     return `<span class="chip ${cls}">${esc(t)}: ${esc(s)}</span>`;
   }).join(" ");
   const bchips = Object.entries(blocked).map(([s, m]) =>
     `<div class="muted" style="font-size:.83rem"><span class="chip deny">blocked</span> ${esc(s)} — needs ${m.map(esc).join(", ")}</div>`).join("");
-  return `<hr class="divider" /><div class="label">Compliance / training</div>
-    <div class="tags" style="margin:.3rem 0 .4rem">${tchips || '<span class="muted">none</span>'}</div>${bchips}`;
+  const compBlock = (Object.keys(trainings).length || Object.keys(blocked).length)
+    ? `<hr class="divider" /><div class="label">Compliance / training</div>
+       <div class="tags" style="margin:.3rem 0 .4rem">${tchips || '<span class="muted">none</span>'}</div>${bchips}`
+    : "";
+  return mfaBlock + compBlock;
 }
 
 function groupTags(a) {
@@ -647,8 +673,11 @@ async function renderExplorer() {
       </div>
       ${accessTables(a)}
       ${explorerCompliance(a)}
-      <p class="muted" style="font-size:.8rem;margin:.9rem 0 0">Dashed tags ⤴ are inherited through AD nesting. Blocked shares need current training.</p>
+      <p class="muted" style="font-size:.8rem;margin:.9rem 0 0">Dashed tags ⤴ are inherited through AD nesting. Blocked shares need current training or MFA.</p>
     </div>`;
+  $$("#ex-report [data-act='mfa']").forEach((b) => b.onclick = async () => {
+    await backend.enrollMfa(b.dataset.user); renderExplorer();
+  });
   fillCheckControls();
 }
 

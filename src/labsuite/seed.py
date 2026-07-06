@@ -165,10 +165,11 @@ def build_lab() -> ControlPlane:
     for display_name, department, role, title in SEED_PEOPLE:
         result = cp.onboard(display_name, department, role, title=title)
         cp.okta.set_password(result.username, DEMO_PASSWORD)
-        # Established employees have already completed their required training, so
-        # their gated access is live. A *fresh* onboard starts pending -- which is
-        # what demonstrates compliance-gated access.
+        # Established employees have completed training and enrolled MFA, so their
+        # gated + conditional-access resources are live. A *fresh* onboard starts
+        # with neither -- which is what demonstrates the gating.
         for training in required_trainings(role):
             cp.complete_training(result.username, training, actor="system")
+        cp.enroll_mfa(result.username, actor="system")
 
     return cp

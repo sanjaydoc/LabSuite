@@ -179,6 +179,14 @@ def create_app(cp: ControlPlane | None = None) -> FastAPI:
         control.expire_training(username, training)
         return {"username": username, "training": training, "status": "expired"}
 
+    @app.post("/mfa/enroll")
+    def enroll_mfa(username: str = Body(..., embed=True)) -> dict:
+        try:
+            control.enroll_mfa(username)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return {"username": username, "mfa_enrolled": True}
+
     # --------------------------------------------------------------- #
     # Operations (SaaS / equipment / inventory / vendors / safety)
     # --------------------------------------------------------------- #

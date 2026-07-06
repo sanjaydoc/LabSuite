@@ -116,7 +116,8 @@ class AccessReport:
     truenas: dict[str, str]
     proxmox: dict[str, str]
     trainings: dict[str, str] = field(default_factory=dict)
-    blocked: dict[str, list[str]] = field(default_factory=dict)  # share -> missing trainings
+    blocked: dict[str, list[str]] = field(default_factory=dict)  # share -> missing requirements
+    mfa_enrolled: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -128,6 +129,7 @@ class AccessReport:
             "proxmox": self.proxmox,
             "trainings": self.trainings,
             "blocked": self.blocked,
+            "mfa_enrolled": self.mfa_enrolled,
         }
 
 
@@ -314,14 +316,18 @@ class ControlPlane:
         user = self.okta.get_user(username)
         active = bool(user and user.active)
         groups = self.ad.effective_groups(username)
+        mfa = self.okta.is_mfa_enrolled(username)
 
         # Group membership grants eligibility; gated shares also require current
-        # training. A share the user is eligible for but not cleared for is moved
-        # from granted access to `blocked`, with the trainings still needed.
+        # training, and sensitive shares require MFA (conditional access). A share
+        # the user is eligible for but not cleared for is moved to `blocked`, with
+        # the requirements still outstanding.
         nas: dict[str, str] = {}
         blocked: dict[str, list[str]] = {}
         for name, level in self.truenas.shares_for(groups).items():
             missing = self.compliance.missing_for_share(username, name) if active else []
+            if active and self.truenas.get_share(name).sensitive and not mfa:
+                missing = [*missing, "MFA (Okta Verify)"]
             if missing:
                 blocked[name] = missing
             else:
@@ -340,6 +346,7 @@ class ControlPlane:
             proxmox=pve,
             trainings=self.compliance.trainings_for(username),
             blocked=blocked,
+            mfa_enrolled=mfa,
         )
 
     def check_truenas(self, username: str, share: str, action: str = "read", *, actor: str | None = None) -> AccessDecision:
@@ -349,12 +356,15 @@ class ControlPlane:
         granted, via = self.truenas.level_for(share, groups)
         allowed = granted >= required
 
-        # Compliance gate: even with a sufficient group grant, gated shares need
-        # current training.
+        # Compliance gate (training) + conditional access (MFA on sensitive data).
         missing = self.compliance.missing_for_share(username, share)
+        needs_mfa = self.truenas.get_share(share).sensitive and not self.okta.is_mfa_enrolled(username)
         if allowed and missing:
             allowed = False
             reason = f"BLOCKED — training not current: {', '.join(missing)}"
+        elif allowed and needs_mfa:
+            allowed = False
+            reason = "BLOCKED — conditional access: MFA (Okta Verify) required for sensitive data"
         elif allowed:
             reason = f"granted via {', '.join(via)}"
         else:
@@ -410,6 +420,11 @@ class ControlPlane:
         """Mark a training lapsed -- gated access relying on it auto-revokes."""
         self.compliance.expire(username, training)
         self.audit.record(actor, "training.expire", username, "compliance", outcome="denied", detail=training)
+
+    def enroll_mfa(self, username: str, *, actor: str | None = None) -> None:
+        """Enroll a user in MFA (Okta Verify) -- unlocks conditional-access resources."""
+        self.okta.enroll_mfa(username)
+        self.audit.record(actor or username, "mfa.enroll", username, "okta", detail="Okta Verify")
 
     # ------------------------------------------------------------------ #
     # Access review

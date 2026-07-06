@@ -171,7 +171,9 @@ def cmd_access(args: argparse.Namespace) -> int:
         print(f"  {path:14} {role}")
     if not report.proxmox:
         print(f"  {DIM}(none){RESET}")
-    if report.trainings:
+    mfa = _c("enrolled", GREEN) if report.mfa_enrolled else _c("not enrolled", RED)
+    print(f"\n  MFA (Okta Verify)   : {mfa}")
+    if report.trainings or report.blocked:
         _header("Compliance / training")
         for training, status in sorted(report.trainings.items()):
             colour = GREEN if status == "current" else RED
@@ -221,6 +223,18 @@ def cmd_train(args: argparse.Namespace) -> int:
         cp.complete_training(args.user, args.training)
         print(f"{args.training} for {args.user}: {_c('current', GREEN)} — gated access unlocked")
     _save(cp, args.state)
+    return 0
+
+
+def cmd_mfa(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    if args.enroll:
+        cp.enroll_mfa(args.user)
+        print(f"{args.user}: MFA {_c('enrolled', GREEN)} (Okta Verify) — conditional-access resources unlocked")
+        _save(cp, args.state)
+    else:
+        status = _c("enrolled", GREEN) if cp.okta.is_mfa_enrolled(args.user) else _c("not enrolled", RED)
+        print(f"{args.user}: MFA {status}")
     return 0
 
 
@@ -538,6 +552,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("devices", help="list the managed laptop fleet").set_defaults(func=cmd_devices)
     sub.add_parser("compliance", help="show training records").set_defaults(func=cmd_compliance)
+
+    p = sub.add_parser("mfa", help="show or --enroll a user's MFA (Okta Verify)")
+    p.add_argument("--user", required=True)
+    p.add_argument("--enroll", action="store_true")
+    p.set_defaults(func=cmd_mfa)
 
     p = sub.add_parser("train", help="record a training as complete (or --expire it)")
     p.add_argument("--user", required=True)

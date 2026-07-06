@@ -27,7 +27,18 @@ class OktaDirectory(IdentityProvider):
         self.users: dict[str, User] = {}
         self.groups: dict[str, Group] = {}
         self._passwords: dict[str, str] = {}
+        self._mfa: set[str] = set()  # usernames with MFA (Okta Verify) enrolled
         self.signing_secret = signing_secret
+
+    # ------------------------------------------------------------------ #
+    # MFA (conditional-access input)
+    # ------------------------------------------------------------------ #
+    def enroll_mfa(self, username: str) -> None:
+        self._require(username)
+        self._mfa.add(username)
+
+    def is_mfa_enrolled(self, username: str) -> bool:
+        return username in self._mfa
 
     # ------------------------------------------------------------------ #
     # Users
@@ -173,6 +184,7 @@ class OktaDirectory(IdentityProvider):
             "users": [u.to_dict() for u in self.users.values()],
             "passwords": dict(self._passwords),
             "groups": [g.to_dict() for g in self.groups.values()],
+            "mfa": sorted(self._mfa),
         }
 
     @classmethod
@@ -181,4 +193,5 @@ class OktaDirectory(IdentityProvider):
         okta.users = {u["username"]: User.from_dict(u) for u in data.get("users", [])}
         okta._passwords = dict(data.get("passwords", {}))
         okta.groups = {g["name"]: Group.from_dict(g) for g in data.get("groups", [])}
+        okta._mfa = set(data.get("mfa", []))
         return okta

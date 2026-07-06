@@ -32,6 +32,7 @@ def test_completing_training_unlocks_access():
     cp.onboard("Nadia Rahman", Department.INVIVO, "invivo-scientist")
     cp.complete_training("nrahman", "IACUC")
     cp.complete_training("nrahman", "Biosafety")
+    cp.enroll_mfa("nrahman")  # sensitive share also requires conditional-access MFA
     decision = cp.check_truenas("nrahman", "invivo-study-data", "modify")
     assert decision.allowed
     assert cp.resolve_access("nrahman").truenas.get("invivo-study-data") == "modify"

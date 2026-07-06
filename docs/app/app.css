@@ -65,8 +65,18 @@ input:focus, select:focus { outline: none; border-color: var(--ink); }
 
 @media (max-width: 720px) {
   .app { grid-template-columns: 1fr; }
-  .side { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1.5px solid var(--rule); padding: 10px; gap: 6px; }
+  .side { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1.5px solid var(--rule); padding: 10px; gap: 6px; -webkit-overflow-scrolling: touch; }
   .side .grp { display: none; }
   .side .navitem { width: auto; white-space: nowrap; }
-  .main { padding: 22px 18px 48px; }
+  .main { padding: 22px 16px 48px; max-width: 100%; }
+  .view h2 { font-size: 1.55rem; }
+  .view .sub { font-size: .9rem; margin-bottom: 1.1rem; }
+  /* Tables: let the card scroll sideways instead of crushing/wrapping cells
+     (e.g. the "overdue 3d · mark serviced" cell in Lab ops). */
+  .card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  th, td { white-space: nowrap; }
+  /* Inline action controls (request/check filter rows) stack cleanly. */
+  .field select[style*="width:auto"], .field select { width: 100%; }
+  .kv { grid-template-columns: 1fr; gap: .15rem .5rem; }
+  .kv .k { margin-top: .5rem; font-weight: 600; }
 }

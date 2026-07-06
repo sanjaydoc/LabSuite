@@ -93,6 +93,7 @@ def main() -> None:
         "saas_baseline": list(SAAS_BASELINE),
         "saas_role_apps": dict(SAAS_ROLE_APPS),
         "compliance_records": cp.compliance.all_records(),
+        "mfa_enrolled": sorted(u.username for u in cp.okta.list_users() if cp.okta.is_mfa_enrolled(u.username)),
         "operations": cp.ops.to_dict(),
         "all_groups": sorted({g.name for g in cp.ad.groups.values()} | set(cp.okta.groups)),
         "requests": cp.requests.to_dict()["requests"],

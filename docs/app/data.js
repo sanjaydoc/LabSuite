@@ -330,6 +330,22 @@ window.LABSUITE_DATA = {
       "Data-Handling": "current"
     }
   },
+  "mfa_enrolled": [
+    "anguyen",
+    "bokafor",
+    "cdiaz",
+    "drao",
+    "epark",
+    "freed",
+    "gkim",
+    "ipetrov",
+    "lpark",
+    "mchen",
+    "nosei",
+    "rpatel",
+    "sanbu",
+    "talvarez"
+  ],
   "operations": {
     "saas": [
       {

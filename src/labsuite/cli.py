@@ -329,6 +329,45 @@ def cmd_alerts(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_campaign(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    if args.start:
+        p = cp.start_review_campaign(args.name or "Access review")
+        print(f"Started campaign {_c(p['name'], CYAN)} over {p['total']} users")
+        _save(cp, args.state)
+        return 0
+    if args.certify:
+        try:
+            cp.certify_user(args.certify, reviewer=args.reviewer or "it-admin")
+        except KeyError as exc:
+            raise SystemExit(str(exc)) from exc
+        print(f"{args.certify}: {_c('certified', GREEN)}")
+        _save(cp, args.state)
+        return 0
+    if args.revoke:
+        try:
+            cp.revoke_user(args.revoke, reviewer=args.reviewer or "it-admin", note=args.note or "")
+        except KeyError as exc:
+            raise SystemExit(str(exc)) from exc
+        print(f"{args.revoke}: {_c('revoked', RED)} — entitlements stripped")
+        _save(cp, args.state)
+        return 0
+
+    st = cp.campaign_status()
+    p = st["progress"]
+    _header(f"Access-review campaign: {p['name'] or '(none started)'}")
+    if not p["total"]:
+        print(f"  {DIM}no campaign — run `labsuite campaign --start`{RESET}")
+        return 0
+    print(f"  {p['completion_pct']}% reviewed  "
+          f"({_c(str(p['certified']) + ' certified', GREEN)}, "
+          f"{_c(str(p['revoked']) + ' revoked', RED)}, {p['pending']} pending)")
+    for r in st["rows"]:
+        colour = GREEN if r["status"] == "certified" else RED if r["status"] == "revoked" else DIM
+        print(f"  {r['username']:10} {_c(r['status'], colour):8}  {r['shares']} shares, {r['vms']} VMs")
+    return 0
+
+
 def cmd_net(args: argparse.Namespace) -> int:
     cp = _load_or_build(args.state)
     # A single reachability check?
@@ -627,6 +666,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--check", nargs=2, metavar=("SRC", "DST"), help="test east-west reachability between two segments")
     p.add_argument("--move", nargs=2, metavar=("DEVICE", "SEGMENT"), help="move a device onto another VLAN")
     p.set_defaults(func=cmd_net)
+
+    p = sub.add_parser("campaign", help="access-review campaign (attestation): certify/revoke per user")
+    p.add_argument("--start", action="store_true", help="open a new campaign over all active users")
+    p.add_argument("--name", help="campaign name (with --start)")
+    p.add_argument("--certify", metavar="USER", help="attest a user's access is appropriate")
+    p.add_argument("--revoke", metavar="USER", help="revoke a user's entitlements")
+    p.add_argument("--reviewer", help="who is making the decision")
+    p.add_argument("--note", help="decision note")
+    p.set_defaults(func=cmd_campaign)
 
     sub.add_parser("alerts", help="action center -- every outstanding flag in one feed").set_defaults(func=cmd_alerts)
     sub.add_parser("ops", help="operations dashboard (SaaS spend + flags)").set_defaults(func=cmd_ops)

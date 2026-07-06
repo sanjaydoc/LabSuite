@@ -63,6 +63,44 @@ class DemoEngine {
     for (const s of net.segments || []) this.segments[s.name] = { ...s };
     this.netDevices = (net.devices || []).map((d) => ({ ...d }));
     this.netPolicy = new Set((net.policy || []).map((p) => p[0] + "->" + p[1]));
+    // access-review campaign (attestation)
+    const cmp = data.campaign || {};
+    this.campaign = { name: cmp.name || "", subjects: [...(cmp.subjects || [])], decisions: { ...(cmp.decisions || {}) }, open: cmp.open !== false };
+  }
+
+  // ---- access-review campaign --------------------------------------
+  startCampaign(name) {
+    const subjects = Object.values(this.users).filter((u) => u.active).map((u) => u.username);
+    this.campaign = { name: name || "Access review", subjects, decisions: {}, open: true };
+    for (const u of subjects) this.campaign.decisions[u] = { status: "pending", reviewer: "", note: "" };
+    this.log("control-plane", "campaign.start", this.campaign.name, "success", `${subjects.length} subjects`);
+    return this.campaignProgress();
+  }
+  certifyUser(u) {
+    this.campaign.decisions[u] = { status: "certified", reviewer: "it-admin", note: "" };
+    this.log("control-plane", "campaign.certify", u, "success");
+    return this.campaignProgress();
+  }
+  revokeUser(u) {
+    if (this.users[u]) this.users[u].okta_groups = [];  // strip entitlements
+    this.campaign.decisions[u] = { status: "revoked", reviewer: "it-admin", note: "" };
+    this.log("control-plane", "campaign.revoke", u, "denied", "entitlements stripped");
+    return this.campaignProgress();
+  }
+  campaignProgress() {
+    const c = this.campaign, total = c.subjects.length;
+    const certified = Object.values(c.decisions).filter((d) => d.status === "certified").length;
+    const revoked = Object.values(c.decisions).filter((d) => d.status === "revoked").length;
+    return { name: c.name, open: c.open, total, certified, revoked, pending: total - certified - revoked,
+      completion_pct: total ? Math.round((100 * (certified + revoked)) / total) : 100 };
+  }
+  campaignStatus() {
+    const rows = this.campaign.subjects.map((u) => {
+      const a = this.resolveAccess(u), d = this.campaign.decisions[u] || {};
+      return { username: u, status: d.status || "pending", reviewer: d.reviewer || "",
+        shares: Object.keys(a.truenas).length, vms: Object.keys(a.proxmox).length };
+    });
+    return { progress: this.campaignProgress(), rows };
   }
 
   // ---- network / segmentation --------------------------------------
@@ -133,6 +171,10 @@ class DemoEngine {
     for (const flag of this.netFlags()) add(flag.includes("MISPLACED") ? "high" : "medium", "network", flag, "network");
     const pending = this.requests.filter((r) => r.status === "pending");
     if (pending.length) add("info", "requests", `${pending.length} access request(s) awaiting approval`, "requests");
+    if (this.campaign.open && this.campaign.subjects.length) {
+      const prog = this.campaignProgress();
+      if (prog.pending) add("medium", "campaign", `${prog.pending} user(s) not yet reviewed (${prog.completion_pct}% done)`, "review");
+    }
     const order = { high: 0, medium: 1, info: 2 };
     alerts.sort((a, b) => (order[a.severity] ?? 3) - (order[b.severity] ?? 3));
     const counts = { high: 0, medium: 0, info: 0 };
@@ -506,6 +548,10 @@ const demoBackend = {
   async netCheck(src, dst) { return engine.checkSegmentation(src, dst); },
   async netMove(name, segment) { engine.moveDevice(name, segment); },
   async alerts() { return engine.actionCenter(); },
+  async campaign() { return engine.campaignStatus(); },
+  async startCampaign(name) { return engine.startCampaign(name); },
+  async certifyUser(u) { engine.certifyUser(u); },
+  async revokeUser(u) { engine.revokeUser(u); },
   async usernames() { return Object.keys(engine.users).sort(); },
 };
 
@@ -571,6 +617,10 @@ const liveBackend = {
   async netCheck(src, dst) { return this._post("/network/check", { src, dst }); },
   async netMove(name, segment) { await this._post("/network/move", { device: name, segment }); },
   async alerts() { try { return await this._json("/alerts"); } catch { return { alerts: [], counts: { high: 0, medium: 0, info: 0 }, total: 0 }; } },
+  async campaign() { try { return await this._json("/campaign"); } catch { return { progress: { total: 0 }, rows: [] }; } },
+  async startCampaign(name) { return this._post("/campaign/start", { name }); },
+  async certifyUser(u) { await this._post("/campaign/certify", { username: u }); },
+  async revokeUser(u) { await this._post("/campaign/revoke", { username: u }); },
   async usernames() {
     try { return (await this._json("/scim/v2/Users")).Resources.map((u) => u.userName).sort(); }
     catch { return Object.keys(engine.users).sort(); }
@@ -838,6 +888,41 @@ async function renderReview() {
     rows.map((u) => { const e = r.entitlements[u]; return `<tr><td>${esc(u)}</td>
       <td>${e.active ? '<span class="chip allow">active</span>' : '<span class="chip deny">disabled</span>'}</td>
       <td>${Object.keys(e.truenas).length}</td><td>${Object.keys(e.proxmox).length}</td></tr>`; }).join("");
+  await renderCampaign();
+}
+
+async function renderCampaign() {
+  const st = await backend.campaign();
+  const p = st.progress || { total: 0 };
+  if (!p.total) {
+    byId("rv-campaign").innerHTML = `<div class="card">
+      <div class="label" style="margin-bottom:6px">Attestation campaign</div>
+      <p class="muted" style="font-size:.88rem;margin:0 0 .8rem">Turn this report into a certify/revoke campaign — reviewers attest each user's access and progress is tracked.</p>
+      <button class="btn btn-sm" id="cmp-start">Start review campaign</button></div>`;
+    byId("cmp-start").onclick = async () => { await backend.startCampaign("Access review"); renderReview(); };
+    return;
+  }
+  const bar = `<div class="progress"><span style="width:${p.completion_pct}%"></span></div>`;
+  const body = (st.rows || []).map((r) => {
+    const chipCls = r.status === "certified" ? "allow" : r.status === "revoked" ? "deny" : "";
+    const actions = r.status === "pending"
+      ? `${_actBtn("certify", `data-u="${esc(r.username)}"`, "certify")} ${_actBtn("revoke", `data-u="${esc(r.username)}"`, "revoke")}`
+      : `<span class="chip ${chipCls}">${esc(r.status)}</span>`;
+    return `<tr><td>${esc(r.username)}</td><td>${r.shares} shares, ${r.vms} VMs</td><td>${actions}</td></tr>`;
+  }).join("");
+  byId("rv-campaign").innerHTML = `<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
+      <div class="label">Attestation campaign — ${esc(p.name)}</div>
+      <div class="tags"><span class="chip allow">${p.certified} certified</span><span class="chip deny">${p.revoked} revoked</span><span class="chip">${p.pending} pending</span></div>
+    </div>
+    ${bar}
+    <div class="muted" style="font-size:.82rem;margin:.2rem 0 .6rem">${p.completion_pct}% reviewed</div>
+    <table><tr><th>User</th><th>Access</th><th></th></tr>${body}</table></div>`;
+  $$("#rv-campaign button.act").forEach((b) => b.onclick = async () => {
+    if (b.dataset.act === "certify") await backend.certifyUser(b.dataset.u);
+    else await backend.revokeUser(b.dataset.u);
+    renderReview();
+  });
 }
 
 async function renderAudit() {

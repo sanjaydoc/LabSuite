@@ -159,6 +159,31 @@ def create_app(cp: ControlPlane | None = None) -> FastAPI:
     def alerts() -> dict:
         return control.action_center()
 
+    # --------------------------------------------------------------- #
+    # Access-review campaigns (attestation)
+    # --------------------------------------------------------------- #
+    @app.get("/campaign")
+    def campaign() -> dict:
+        return control.campaign_status()
+
+    @app.post("/campaign/start")
+    def campaign_start(name: str = Body(default="Access review", embed=True)) -> dict:
+        return control.start_review_campaign(name)
+
+    @app.post("/campaign/certify")
+    def campaign_certify(username: str = Body(...), note: str = Body(default="")) -> dict:
+        try:
+            return control.certify_user(username, note=note)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/campaign/revoke")
+    def campaign_revoke(username: str = Body(...), note: str = Body(default="")) -> dict:
+        try:
+            return control.revoke_user(username, note=note)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
     @app.get("/audit")
     def audit(limit: int = 50) -> dict:
         events = [e.to_dict() for e in control.audit.tail(limit)]

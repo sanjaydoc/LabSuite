@@ -61,6 +61,10 @@ input:focus, select:focus { outline: none; border-color: var(--ink); }
 
 .linkish { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 
+/* --- progress bar (attestation campaign, onboarding readiness) ---------- */
+.progress { height: 8px; background: var(--paper-2); border: 1px solid var(--hair); border-radius: 999px; overflow: hidden; margin: .5rem 0 .2rem; }
+.progress > span { display: block; height: 100%; background: var(--ink); border-radius: 999px; transition: width .3s ease; }
+
 /* --- action center ----------------------------------------------------- */
 .alerts-list { display: flex; flex-direction: column; }
 .alert-row {

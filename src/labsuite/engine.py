@@ -31,6 +31,7 @@ from labsuite.adapters.base import (
     StorageProvider,
 )
 from labsuite.audit import AuditLog
+from labsuite.campaigns import ReviewCampaign
 from labsuite.compliance import ComplianceRegistry
 from labsuite.endpoints import DeviceFleet
 from labsuite.models import AccessDecision, AccessLevel, Department, ProxmoxRole
@@ -160,6 +161,7 @@ class ControlPlane:
         self.ops = operations or Operations()
         self.network = network or Network()
         self.requests = RequestQueue()
+        self.campaign = ReviewCampaign("")  # empty until a review campaign is started
         self.audit = audit or AuditLog()
         self.scim = ScimSync(self.okta, self.ad, self.audit)
 
@@ -465,6 +467,47 @@ class ControlPlane:
         return self.scim.reconcile(actor=actor)
 
     # ------------------------------------------------------------------ #
+    # Access-review campaigns (attestation)
+    # ------------------------------------------------------------------ #
+    def start_review_campaign(self, name: str = "Access review", *, actor: str = "it-admin") -> dict:
+        """Open an attestation campaign over every active user."""
+        subjects = [u.username for u in self.okta.list_users() if u.active]
+        self.campaign = ReviewCampaign(name)
+        self.campaign.start(subjects)
+        self.audit.record(actor, "campaign.start", name, "control-plane", detail=f"{len(subjects)} subjects")
+        return self.campaign.progress()
+
+    def certify_user(self, username: str, *, reviewer: str = "it-admin", note: str = "") -> dict:
+        """Attest that a user's current access is still appropriate (keep it)."""
+        self.campaign.decide(username, "certified", reviewer, note)
+        self.audit.record(reviewer, "campaign.certify", username, "control-plane", detail=note)
+        return self.campaign.progress()
+
+    def revoke_user(self, username: str, *, reviewer: str = "it-admin", note: str = "") -> dict:
+        """Reviewer revokes a user's entitlements -- strip groups, cascade to AD."""
+        removed = self.okta.remove_from_all_groups(username)
+        self.scim.reconcile(actor=reviewer)
+        self.campaign.decide(username, "revoked", reviewer, note)
+        self.audit.record(reviewer, "campaign.revoke", username, "control-plane",
+                          outcome="denied", detail=f"removed {', '.join(removed) or 'none'}")
+        return self.campaign.progress()
+
+    def campaign_status(self) -> dict:
+        """Progress plus a per-user row (decision + live access counts)."""
+        rows = []
+        for username in self.campaign.subjects:
+            report = self.resolve_access(username)
+            d = self.campaign.decisions.get(username, {})
+            rows.append({
+                "username": username,
+                "status": d.get("status", "pending"),
+                "reviewer": d.get("reviewer", ""),
+                "shares": len(report.truenas),
+                "vms": len(report.proxmox),
+            })
+        return {"progress": self.campaign.progress(), "rows": rows}
+
+    # ------------------------------------------------------------------ #
     # Action center -- one inbox aggregating every operational flag
     # ------------------------------------------------------------------ #
     def action_center(self) -> dict:
@@ -518,6 +561,12 @@ class ControlPlane:
         pending = self.requests.pending()
         if pending:
             add("info", "requests", f"{len(pending)} access request(s) awaiting approval", "requests")
+
+        # Governance: an access-review campaign still awaiting attestations.
+        if self.campaign.open and self.campaign.subjects:
+            prog = self.campaign.progress()
+            if prog["pending"]:
+                add("medium", "campaign", f"{prog['pending']} user(s) not yet reviewed ({prog['completion_pct']}% done)", "review")
 
         order = {"high": 0, "medium": 1, "info": 2}
         alerts.sort(key=lambda a: order.get(a["severity"], 3))
@@ -645,6 +694,7 @@ class ControlPlane:
             "operations": self.ops.to_dict(),
             "network": self.network.to_dict(),
             "requests": self.requests.to_dict(),
+            "campaign": self.campaign.to_dict(),
             "audit": self.audit.to_list(),
         }
 
@@ -664,4 +714,5 @@ class ControlPlane:
             audit=audit,
         )
         cp.requests = RequestQueue.from_dict(data.get("requests", {}))
+        cp.campaign = ReviewCampaign.from_dict(data.get("campaign", {}))
         return cp

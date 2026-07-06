@@ -484,6 +484,26 @@ def cmd_net(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_cost(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    c = cp.cost_analytics()
+    _header("Cost analytics")
+    print(f"  SaaS: {_c('$' + format(c['saas_monthly_total'], ',.0f') + '/mo', CYAN)} "
+          f"(${c['saas_annual_total']:,.0f}/yr)   "
+          f"Vendors: {_c('$' + format(c['vendor_annual_total'], ',.0f') + '/yr', CYAN)}")
+    if c["orphaned_monthly"]:
+        print(f"  {_c('!', RED)} ${c['orphaned_monthly']:,.0f}/mo reclaimable from orphaned seats")
+    print(f"\n  {BOLD}SaaS by department (monthly vs budget){RESET}")
+    for d in c["by_department"]:
+        budget = f"/ ${d['budget']:,.0f}" if d["budget"] is not None else ""
+        flag = _c("OVER", RED) if d["over_budget"] else _c("ok", GREEN)
+        print(f"    {d['department']:14} ${d['monthly']:>7,.0f} {budget:10} {flag}")
+    print(f"\n  {BOLD}Vendor spend by category (annual){RESET}")
+    for v in c["vendor_by_category"]:
+        print(f"    {v['category']:22} ${v['annual']:>10,.0f}")
+    return 0
+
+
 def cmd_ops(args: argparse.Namespace) -> int:
     cp = _load_or_build(args.state)
     s = cp.ops_summary()
@@ -772,6 +792,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("alerts", help="action center -- every outstanding flag in one feed").set_defaults(func=cmd_alerts)
     sub.add_parser("ops", help="operations dashboard (SaaS spend + flags)").set_defaults(func=cmd_ops)
+    sub.add_parser("cost", help="cost analytics: SaaS by dept vs budget + vendor spend").set_defaults(func=cmd_cost)
     sub.add_parser("saas", help="SaaS licences + cost").set_defaults(func=cmd_saas)
     sub.add_parser("assets", help="equipment + maintenance").set_defaults(func=cmd_assets)
     sub.add_parser("inventory", help="reagent / consumable inventory").set_defaults(func=cmd_inventory)

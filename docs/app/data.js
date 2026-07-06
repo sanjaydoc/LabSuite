@@ -799,6 +799,19 @@ window.LABSUITE_DATA = {
     "CI-Operators": "CI/CD pipeline admin on the Proxmox CI pool",
     "GPU-Cluster-Users": "GPU training cluster access"
   },
+  "saas_budget": {
+    "Bio": 200.0,
+    "In-Vivo": 200.0,
+    "Delivery": 150.0,
+    "Platform": 150.0,
+    "Data-Science": 200.0,
+    "Lab": 120.0,
+    "Lab-Ops": 120.0,
+    "Compliance": 80.0,
+    "Facilities": 100.0,
+    "Legal": 80.0,
+    "IT": 150.0
+  },
   "all_groups": [
     "Bio",
     "CI-Operators",

@@ -75,6 +75,12 @@ input:focus, select:focus { outline: none; border-color: var(--ink); }
 .linkish-row { cursor: pointer; }
 .linkish-row:hover { background: var(--paper-2); }
 
+/* --- budget bars (cost analytics) -------------------------------------- */
+.budgetbar { position: relative; height: 10px; background: var(--paper-2); border: 1px solid var(--hair); border-radius: 999px; overflow: hidden; }
+.budgetbar > span { display: block; height: 100%; background: var(--ink); border-radius: 999px; }
+.budgetbar > span.over { background: var(--no); }
+.budgetbar > i { position: absolute; top: -2px; width: 2px; height: 14px; background: var(--muted); }
+
 /* --- action center ----------------------------------------------------- */
 .alerts-list { display: flex; flex-direction: column; }
 .alert-row {

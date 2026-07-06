@@ -189,6 +189,35 @@ class DemoEngine {
     };
   }
 
+  // ---- cost analytics & budgets ------------------------------------
+  costAnalytics() {
+    const budgets = this.d.saas_budget || {};
+    const r2 = (x) => Math.round(x * 100) / 100;
+    const byDept = {}; let orphaned = 0;
+    for (const name in this.saas) {
+      const app = this.saas[name];
+      for (const user of app.assignees) {
+        const d = this.users[user] ? this.users[user].department : "Unknown";
+        byDept[d] = (byDept[d] || 0) + app.cost;
+        if (!this.isActive(user)) orphaned += app.cost;
+      }
+    }
+    const deptRows = Object.keys(byDept).sort().map((d) => {
+      const b = budgets[d], spend = byDept[d];
+      return { department: d, monthly: r2(spend), annual: r2(spend * 12), budget: b ?? null, over_budget: b != null && spend > b };
+    });
+    const vendorByCat = {}; let vTotal = 0;
+    for (const v of this.vendors) { vendorByCat[v.category] = (vendorByCat[v.category] || 0) + v.annual_cost; vTotal += v.annual_cost; }
+    const saasMonthly = r2(Object.values(byDept).reduce((a, b) => a + b, 0));
+    return {
+      saas_monthly_total: saasMonthly, saas_annual_total: r2(saasMonthly * 12), by_department: deptRows,
+      vendor_annual_total: r2(vTotal),
+      vendor_by_category: Object.keys(vendorByCat).sort().map((c) => ({ category: c, annual: r2(vendorByCat[c]) })),
+      orphaned_monthly: r2(orphaned), orphaned_annual: r2(orphaned * 12),
+      over_budget_departments: deptRows.filter((r) => r.over_budget).map((r) => r.department),
+    };
+  }
+
   // ---- onboarding readiness checklist ------------------------------
   onboardingChecklist(username) {
     const u = this.users[username];
@@ -244,6 +273,12 @@ class DemoEngine {
     for (const item of ops.open_safety) add("high", "safety", `Safety: ${item}`, "ops");
     for (const seat of ops.orphaned_seats) add("medium", "saas", `Orphaned SaaS seat: ${seat}`, "saas");
     for (const r of ops.upcoming_renewals) add("info", "vendor", `Renewal due: ${r}`, "ops");
+    const costs = this.costAnalytics();
+    for (const d of costs.over_budget_departments) {
+      const row = costs.by_department.find((r) => r.department === d);
+      add("medium", "cost", `${d} over SaaS budget ($${Math.round(row.monthly)} > $${Math.round(row.budget)})`, "cost");
+    }
+    if (costs.orphaned_monthly) add("medium", "cost", `$${Math.round(costs.orphaned_monthly)}/mo in orphaned SaaS seats reclaimable`, "cost");
     for (const flag of this.netFlags()) add(flag.includes("MISPLACED") ? "high" : "medium", "network", flag, "network");
     const pending = this.requests.filter((r) => r.status === "pending");
     if (pending.length) add("info", "requests", `${pending.length} access request(s) awaiting approval`, "requests");
@@ -637,6 +672,7 @@ const demoBackend = {
   async jitSweep() { return engine.sweepJit(); },
   async readiness() { return engine.readinessSummary(); },
   async readinessUser(u) { return engine.onboardingChecklist(u); },
+  async cost() { return engine.costAnalytics(); },
   async usernames() { return Object.keys(engine.users).sort(); },
 };
 
@@ -712,6 +748,7 @@ const liveBackend = {
   async jitSweep() { return (await this._post("/jit/sweep", {})).expired; },
   async readiness() { try { return await this._json("/readiness"); } catch { return { rows: [], ready_count: 0, total: 0 }; } },
   async readinessUser(u) { return this._json(`/readiness/${u}`); },
+  async cost() { try { return await this._json("/cost"); } catch { return { by_department: [], vendor_by_category: [] }; } },
   async usernames() {
     try { return (await this._json("/scim/v2/Users")).Resources.map((u) => u.userName).sort(); }
     catch { return Object.keys(engine.users).sort(); }
@@ -1146,6 +1183,39 @@ async function renderSaas() {
   };
 }
 
+async function renderCost() {
+  const c = await backend.cost();
+  const usd = (n) => "$" + Math.round(n).toLocaleString();
+  byId("cost-stats").innerHTML = [
+    [usd(c.saas_monthly_total), "SaaS / month"],
+    [usd(c.saas_annual_total), "SaaS / year"],
+    [usd(c.vendor_annual_total), "Vendors / year"],
+    [usd(c.orphaned_monthly) + "/mo", "Orphaned seats"],
+  ].map(([n, l]) => `<div class="stat"><div class="n">${esc(n)}</div><div class="l">${esc(l)}</div></div>`).join("");
+  const maxSpend = Math.max(1, ...c.by_department.map((d) => Math.max(d.monthly, d.budget || 0)));
+  const deptRows = c.by_department.map((d) => {
+    const w = Math.round((100 * d.monthly) / maxSpend);
+    const bw = d.budget ? Math.round((100 * d.budget) / maxSpend) : 0;
+    const barCls = d.over_budget ? "over" : "";
+    return `<tr><td>${esc(d.department)}</td>
+      <td style="min-width:160px"><div class="budgetbar"><span class="${barCls}" style="width:${w}%"></span>${d.budget ? `<i style="left:${bw}%"></i>` : ""}</div></td>
+      <td>$${d.monthly.toLocaleString()}</td>
+      <td class="muted">${d.budget != null ? "$" + d.budget.toLocaleString() : "—"}</td>
+      <td>${d.over_budget ? '<span class="chip deny">over</span>' : '<span class="chip allow">ok</span>'}</td></tr>`;
+  }).join("");
+  const catRows = c.vendor_by_category.map((v) =>
+    `<tr><td>${esc(v.category)}</td><td>$${v.annual.toLocaleString()}/yr</td></tr>`).join("");
+  byId("cost-body").innerHTML = `
+    <div class="grid2">
+      <div class="card"><div class="label" style="margin-bottom:6px">SaaS spend by department (monthly vs budget)</div>
+        <table><tr><th>Dept</th><th></th><th>Spend</th><th>Budget</th><th></th></tr>${deptRows}</table>
+        <p class="muted" style="font-size:.8rem;margin:.6rem 0 0">The tick marks each department's monthly budget; a filled red bar is over.</p></div>
+      <div class="card"><div class="label" style="margin-bottom:6px">Vendor spend by category (annual)</div>
+        <table><tr><th>Category</th><th>Annual</th></tr>${catRows}</table>
+        ${c.orphaned_monthly ? `<hr class="divider" /><p class="muted" style="font-size:.85rem;margin:0">Reclaiming orphaned SaaS seats would save <b>${usd(c.orphaned_annual)}/yr</b>.</p>` : ""}</div>
+    </div>`;
+}
+
 const _actBtn = (act, attrs, label) =>
   `<button class="btn btn-sm act" data-act="${act}" ${attrs} style="padding:.15rem .55rem;font-size:.72rem">${label}</button>`;
 
@@ -1373,6 +1443,7 @@ const RENDERERS = {
   review: renderReview, audit: renderAudit, architecture: renderArchitecture,
   devices: renderDevices, compliance: renderCompliance, saas: renderSaas, ops: renderOps,
   requests: renderRequests, network: renderNetwork, jit: renderJit, readiness: renderReadiness,
+  cost: renderCost,
 };
 
 function go(view) {

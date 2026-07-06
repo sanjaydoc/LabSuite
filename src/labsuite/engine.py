@@ -681,6 +681,14 @@ class ControlPlane:
         for renewal in ops["upcoming_renewals"]:
             add("info", "vendor", f"Renewal due: {renewal}", "ops")
 
+        # Cost: departments over their monthly SaaS budget.
+        costs = self.cost_analytics()
+        for dept in costs["over_budget_departments"]:
+            row = next(r for r in costs["by_department"] if r["department"] == dept)
+            add("medium", "cost", f"{dept} over SaaS budget (${row['monthly']:.0f} > ${row['budget']:.0f})", "cost")
+        if costs["orphaned_monthly"]:
+            add("medium", "cost", f"${costs['orphaned_monthly']:.0f}/mo in orphaned SaaS seats reclaimable", "cost")
+
         # Networking: segmentation anomalies.
         for flag in self.network.flags():
             sev = "high" if "MISPLACED" in flag else "medium"
@@ -760,6 +768,50 @@ class ControlPlane:
     def ops_summary(self) -> dict:
         """SaaS spend + flags across equipment, inventory, vendors, and safety."""
         return self.ops.summary(self._is_active)
+
+    def cost_analytics(self) -> dict:
+        """SaaS spend by department vs budget, vendor spend by category, and the
+        savings available from reclaiming orphaned (inactive-user) seats."""
+        from labsuite.operations import DEPARTMENT_SAAS_BUDGET
+
+        dept_of = {u.username: u.department.value for u in self.okta.list_users()}
+        active = {u.username for u in self.okta.list_users() if u.active}
+
+        by_dept: dict[str, float] = {}
+        orphaned = 0.0
+        for app in self.ops.saas.values():
+            for user in app.assignees:
+                cost = app.monthly_cost_per_seat
+                by_dept[dept_of.get(user, "Unknown")] = by_dept.get(dept_of.get(user, "Unknown"), 0.0) + cost
+                if user not in active:
+                    orphaned += cost
+
+        dept_rows = []
+        for dept, spend in sorted(by_dept.items()):
+            budget = DEPARTMENT_SAAS_BUDGET.get(dept)
+            dept_rows.append({
+                "department": dept,
+                "monthly": round(spend, 2),
+                "annual": round(spend * 12, 2),
+                "budget": budget,
+                "over_budget": budget is not None and spend > budget,
+            })
+
+        vendor_by_cat: dict[str, float] = {}
+        for v in self.ops.vendors:
+            vendor_by_cat[v.category] = vendor_by_cat.get(v.category, 0.0) + v.annual_cost
+
+        saas_monthly = round(sum(by_dept.values()), 2)
+        return {
+            "saas_monthly_total": saas_monthly,
+            "saas_annual_total": round(saas_monthly * 12, 2),
+            "by_department": dept_rows,
+            "vendor_annual_total": round(sum(v.annual_cost for v in self.ops.vendors), 2),
+            "vendor_by_category": [{"category": c, "annual": round(a, 2)} for c, a in sorted(vendor_by_cat.items())],
+            "orphaned_monthly": round(orphaned, 2),
+            "orphaned_annual": round(orphaned * 12, 2),
+            "over_budget_departments": [r["department"] for r in dept_rows if r["over_budget"]],
+        }
 
     def complete_maintenance(self, asset_tag: str, *, actor: str = "lab-ops"):
         e = self.ops.complete_maintenance(asset_tag)

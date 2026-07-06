@@ -289,6 +289,10 @@ def create_app(cp: ControlPlane | None = None) -> FastAPI:
     def ops() -> dict:
         return control.ops_summary()
 
+    @app.get("/cost")
+    def cost() -> dict:
+        return control.cost_analytics()
+
     @app.get("/saas")
     def saas() -> dict:
         return {

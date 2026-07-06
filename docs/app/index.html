@@ -49,6 +49,7 @@
       <button class="navitem" data-view="audit">Audit log</button>
       <div class="grp">Operations</div>
       <button class="navitem" data-view="saas">SaaS &amp; cost</button>
+      <button class="navitem" data-view="cost">Cost analytics</button>
       <button class="navitem" data-view="ops">Lab ops</button>
       <button class="navitem" data-view="network">Network</button>
       <div class="grp">Learn</div>
@@ -207,6 +208,14 @@
         <div class="sub">Who has a seat in what — and what it costs. The source of truth for licence spend.</div>
         <div class="stats" id="saas-stats" style="margin-bottom:14px"></div>
         <div class="card" style="padding:6px 18px"><table id="saas-table"></table></div>
+      </section>
+
+      <!-- Cost analytics -->
+      <section class="view" id="view-cost">
+        <h2>Cost analytics</h2>
+        <div class="sub">SaaS spend by department against budget, vendor spend by category, and the savings from reclaiming orphaned seats.</div>
+        <div class="stats" id="cost-stats" style="margin-bottom:16px"></div>
+        <div id="cost-body"></div>
       </section>
 
       <!-- Lab ops -->

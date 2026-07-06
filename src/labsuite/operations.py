@@ -32,6 +32,21 @@ SAAS_CATALOG: dict[str, float] = {
     "Kandji": 6.0,  # MDM admin
 }
 SAAS_BASELINE = ["Slack", "Google-Workspace", "1Password"]
+
+# Monthly SaaS budget per department (USD) -- cost analytics flags overruns.
+DEPARTMENT_SAAS_BUDGET: dict[str, float] = {
+    "Bio": 200.0,
+    "In-Vivo": 200.0,
+    "Delivery": 150.0,
+    "Platform": 150.0,
+    "Data-Science": 200.0,  # seeded spend runs over -> demonstrates the budget flag
+    "Lab": 120.0,
+    "Lab-Ops": 120.0,
+    "Compliance": 80.0,
+    "Facilities": 100.0,
+    "Legal": 80.0,
+    "IT": 150.0,
+}
 SAAS_ROLE_APPS: dict[str, list[str]] = {
     "ml-scientist": ["Benchling", "GitHub"],
     "research-scientist": ["Benchling"],

@@ -15,7 +15,7 @@ from pathlib import Path
 
 from labsuite.jit import ELEVATED_GROUPS
 from labsuite.models import PROXMOX_PRIVILEGES, AccessLevel, Department, ProxmoxRole
-from labsuite.operations import SAAS_BASELINE, SAAS_CATALOG, SAAS_ROLE_APPS
+from labsuite.operations import DEPARTMENT_SAAS_BUDGET, SAAS_BASELINE, SAAS_CATALOG, SAAS_ROLE_APPS
 from labsuite.policy import (
     BASELINE_GROUP,
     DEPARTMENT_GROUP,
@@ -98,6 +98,7 @@ def main() -> None:
         "operations": cp.ops.to_dict(),
         "network": cp.network.to_dict(),
         "elevated_groups": dict(ELEVATED_GROUPS),
+        "saas_budget": dict(DEPARTMENT_SAAS_BUDGET),
         "all_groups": sorted({g.name for g in cp.ad.groups.values()} | set(cp.okta.groups)),
         "requests": cp.requests.to_dict()["requests"],
         "users": users,

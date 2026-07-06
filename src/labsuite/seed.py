@@ -154,6 +154,43 @@ def _wire_operations(cp: ControlPlane) -> None:
     ]
 
 
+def _wire_network(cp: ControlPlane) -> None:
+    net = cp.network
+    # VLAN segments: trust descends Corp > Lab > IoT, Guest is untrusted.
+    net.add_segment("Corp", 10, "10.10.0.0/16", "Staff laptops & workstations", trust="high")
+    net.add_segment("Lab", 20, "10.20.0.0/16", "Lab instruments & DAQ", trust="medium")
+    net.add_segment("IoT", 30, "10.30.0.0/16", "Cameras, sensors, badge readers", trust="low", internet=False)
+    net.add_segment("Guest", 40, "10.40.0.0/16", "Guest Wi-Fi (internet only)", trust="none")
+    net.add_segment("Mgmt", 99, "10.99.99.0/24", "Infra management (Proxmox/TrueNAS/DC)", trust="high", internet=False)
+
+    # Default-deny firewall; only these east-west flows are permitted.
+    net.allow("Corp", "Lab")  # staff reach instruments
+    net.allow("Corp", "IoT")  # IT manages IoT controllers
+    net.allow("Corp", "Mgmt")  # admins reach the infra plane
+    net.allow("Lab", "Mgmt")  # instruments push acquisitions to storage
+    # IoT and Guest originate nothing internal -- that's the segmentation.
+
+    # Staff laptops on Corp.
+    net.add_device("anguyen-mbp", "02:00:00:00:00:01", "laptop", "Corp", owner="anguyen", ip="10.10.4.21")
+    net.add_device("rpatel-mbp", "02:00:00:00:00:02", "laptop", "Corp", owner="rpatel", ip="10.10.4.22")
+    net.add_device("gpu-ws-01", "02:00:00:00:00:03", "workstation", "Corp", ip="10.10.5.10")
+    # Lab instruments on Lab.
+    net.add_device("nextseq-2000", "02:00:00:00:00:11", "instrument", "Lab", ip="10.20.1.5")
+    net.add_device("confocal-lsm980", "02:00:00:00:00:12", "instrument", "Lab", ip="10.20.1.6")
+    net.add_device("daq-rig-2", "02:00:00:00:00:13", "instrument", "Lab", ip="10.20.1.7")
+    net.add_device("lab-printer-1", "02:00:00:00:00:14", "printer", "Lab", ip="10.20.2.9")
+    # IoT endpoints on IoT.
+    net.add_device("cam-vivarium-1", "02:00:00:00:00:21", "camera", "IoT", ip="10.30.7.11")
+    net.add_device("cam-loading-dock", "02:00:00:00:00:22", "camera", "IoT", ip="10.30.7.12")
+    net.add_device("badge-main-door", "02:00:00:00:00:23", "badge-reader", "IoT", ip="10.30.8.4")
+    net.add_device("freezer-temp-1", "02:00:00:00:00:24", "sensor", "IoT", ip="10.30.9.30")
+    # Guest device.
+    net.add_device("visitor-phone", "02:00:00:00:00:31", "guest", "Guest", ip="10.40.1.55")
+    # A deliberate misconfiguration: a camera cabled into the Corp VLAN -- the
+    # exact IoT-segmentation failure the review is meant to surface.
+    net.add_device("cam-server-room", "02:00:00:00:00:25", "camera", "Corp", ip="10.10.9.99")
+
+
 def build_lab() -> ControlPlane:
     """Build and return a fully-populated control plane for the demo lab."""
     cp = ControlPlane()
@@ -161,6 +198,7 @@ def build_lab() -> ControlPlane:
     _wire_proxmox(cp)
     _wire_ad_nesting(cp)
     _wire_operations(cp)
+    _wire_network(cp)
 
     for display_name, department, role, title in SEED_PEOPLE:
         result = cp.onboard(display_name, department, role, title=title)

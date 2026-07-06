@@ -310,6 +310,46 @@ def cmd_devices(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_net(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    # A single reachability check?
+    if args.check:
+        try:
+            src, dst = args.check
+        except ValueError as exc:  # pragma: no cover - argparse enforces nargs=2
+            raise SystemExit("--check takes SRC DST") from exc
+        r = cp.check_segmentation(src, dst)
+        print(f"{src} -> {dst}: {_yes_no(r['allowed'])}  {DIM}{r['reason']}{RESET}")
+        _save(cp, args.state)
+        return 0
+    if args.move:
+        name, segment = args.move
+        dev = cp.move_device(name, segment)
+        if dev is None:
+            raise SystemExit(f"unknown device or segment: {name!r} -> {segment!r}")
+        print(f"{name}: moved to {_c(segment, CYAN)}")
+        _save(cp, args.state)
+        return 0
+
+    s = cp.network_summary()
+    _header("Network segments (VLANs)")
+    for seg in s["segments"]:
+        net_flag = "internet" if seg["internet"] else _c("no-internet", DIM)
+        print(f"  VLAN {seg['vlan_id']:<3} {seg['name']:6} {seg['cidr']:16} "
+              f"trust={seg['trust']:6} {net_flag}  {DIM}{seg['purpose']}{RESET}")
+    _header("Devices")
+    for d in s["devices"]:
+        owner = f" ({d['owner']})" if d["owner"] else ""
+        print(f"  {d['name']:20} {d['kind']:12} {d['segment']:6} {DIM}{d['ip']}{owner}{RESET}")
+    _header("Segmentation flags")
+    if s["flags"]:
+        for f in s["flags"]:
+            print(f"  {_c('!', RED)} {f}")
+    else:
+        print(_c("  clean -- every device is on its expected segment", GREEN))
+    return 0
+
+
 def cmd_ops(args: argparse.Namespace) -> int:
     cp = _load_or_build(args.state)
     s = cp.ops_summary()
@@ -563,6 +603,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--training", required=True)
     p.add_argument("--expire", action="store_true", help="mark the training lapsed instead of complete")
     p.set_defaults(func=cmd_train)
+
+    p = sub.add_parser("net", help="network segments, devices, and segmentation checks")
+    p.add_argument("--check", nargs=2, metavar=("SRC", "DST"), help="test east-west reachability between two segments")
+    p.add_argument("--move", nargs=2, metavar=("DEVICE", "SEGMENT"), help="move a device onto another VLAN")
+    p.set_defaults(func=cmd_net)
 
     sub.add_parser("ops", help="operations dashboard (SaaS spend + flags)").set_defaults(func=cmd_ops)
     sub.add_parser("saas", help="SaaS licences + cost").set_defaults(func=cmd_saas)

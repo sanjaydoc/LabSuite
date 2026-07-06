@@ -188,6 +188,24 @@ def create_app(cp: ControlPlane | None = None) -> FastAPI:
         return {"username": username, "mfa_enrolled": True}
 
     # --------------------------------------------------------------- #
+    # Networking (VLAN segmentation + IoT)
+    # --------------------------------------------------------------- #
+    @app.get("/network")
+    def network() -> dict:
+        return control.network_summary()
+
+    @app.post("/network/check")
+    def network_check(src: str = Body(...), dst: str = Body(...)) -> dict:
+        return control.check_segmentation(src, dst)
+
+    @app.post("/network/move")
+    def network_move(device: str = Body(...), segment: str = Body(...)) -> dict:
+        dev = control.move_device(device, segment)
+        if dev is None:
+            raise HTTPException(status_code=404, detail="unknown device or segment")
+        return dev.to_dict()
+
+    # --------------------------------------------------------------- #
     # Operations (SaaS / equipment / inventory / vendors / safety)
     # --------------------------------------------------------------- #
     @app.get("/ops")

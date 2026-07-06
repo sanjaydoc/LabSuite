@@ -34,6 +34,7 @@ from labsuite.audit import AuditLog
 from labsuite.compliance import ComplianceRegistry
 from labsuite.endpoints import DeviceFleet
 from labsuite.models import AccessDecision, AccessLevel, Department, ProxmoxRole
+from labsuite.network import Network
 from labsuite.okta import OktaDirectory
 from labsuite.operations import Operations
 from labsuite.policy import image_for, onboarding_groups, required_trainings
@@ -145,6 +146,7 @@ class ControlPlane:
         endpoints: EndpointProvider | None = None,
         compliance: ComplianceRegistry | None = None,
         operations: Operations | None = None,
+        network: Network | None = None,
         audit: AuditLog | None = None,
     ) -> None:
         # Any of these may be a real-system adapter; the control plane only ever
@@ -156,6 +158,7 @@ class ControlPlane:
         self.endpoints: EndpointProvider = endpoints or DeviceFleet()
         self.compliance = compliance or ComplianceRegistry()
         self.ops = operations or Operations()
+        self.network = network or Network()
         self.requests = RequestQueue()
         self.audit = audit or AuditLog()
         self.scim = ScimSync(self.okta, self.ad, self.audit)
@@ -547,6 +550,28 @@ class ControlPlane:
         return ok
 
     # ------------------------------------------------------------------ #
+    # Networking (VLAN segmentation + IoT)
+    # ------------------------------------------------------------------ #
+    def network_summary(self) -> dict:
+        return self.network.summary()
+
+    def check_segmentation(self, src: str, dst: str, *, actor: str = "it-admin") -> dict:
+        """Audited east-west reachability check between two VLAN segments."""
+        allowed, reason = self.network.can_reach(src, dst)
+        self.audit.record(
+            actor, "network.check", f"{src}->{dst}", "network",
+            outcome="success" if allowed else "denied", detail=reason,
+        )
+        return {"src": src, "dst": dst, "allowed": allowed, "reason": reason}
+
+    def move_device(self, name: str, segment: str, *, actor: str = "it-admin"):
+        """Re-place a network device onto a different VLAN (e.g. quarantine)."""
+        dev = self.network.move_device(name, segment)
+        if dev is not None:
+            self.audit.record(actor, "network.move", name, "network", detail=f"-> {segment}")
+        return dev
+
+    # ------------------------------------------------------------------ #
     # Serialisation (persist state between CLI invocations)
     # ------------------------------------------------------------------ #
     def to_dict(self) -> dict:
@@ -558,6 +583,7 @@ class ControlPlane:
             "endpoints": self.endpoints.to_dict(),
             "compliance": self.compliance.to_dict(),
             "operations": self.ops.to_dict(),
+            "network": self.network.to_dict(),
             "requests": self.requests.to_dict(),
             "audit": self.audit.to_list(),
         }
@@ -574,6 +600,7 @@ class ControlPlane:
             endpoints=DeviceFleet.from_dict(data.get("endpoints", {})),
             compliance=ComplianceRegistry.from_dict(data.get("compliance", {})),
             operations=Operations.from_dict(data.get("operations", {})),
+            network=Network.from_dict(data.get("network", {})),
             audit=audit,
         )
         cp.requests = RequestQueue.from_dict(data.get("requests", {}))

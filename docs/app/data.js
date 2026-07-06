@@ -626,6 +626,174 @@ window.LABSUITE_DATA = {
       }
     ]
   },
+  "network": {
+    "segments": [
+      {
+        "name": "Corp",
+        "vlan_id": 10,
+        "cidr": "10.10.0.0/16",
+        "purpose": "Staff laptops & workstations",
+        "trust": "high",
+        "internet": true
+      },
+      {
+        "name": "Lab",
+        "vlan_id": 20,
+        "cidr": "10.20.0.0/16",
+        "purpose": "Lab instruments & DAQ",
+        "trust": "medium",
+        "internet": true
+      },
+      {
+        "name": "IoT",
+        "vlan_id": 30,
+        "cidr": "10.30.0.0/16",
+        "purpose": "Cameras, sensors, badge readers",
+        "trust": "low",
+        "internet": false
+      },
+      {
+        "name": "Guest",
+        "vlan_id": 40,
+        "cidr": "10.40.0.0/16",
+        "purpose": "Guest Wi-Fi (internet only)",
+        "trust": "none",
+        "internet": true
+      },
+      {
+        "name": "Mgmt",
+        "vlan_id": 99,
+        "cidr": "10.99.99.0/24",
+        "purpose": "Infra management (Proxmox/TrueNAS/DC)",
+        "trust": "high",
+        "internet": false
+      }
+    ],
+    "devices": [
+      {
+        "name": "anguyen-mbp",
+        "mac": "02:00:00:00:00:01",
+        "kind": "laptop",
+        "segment": "Corp",
+        "owner": "anguyen",
+        "ip": "10.10.4.21"
+      },
+      {
+        "name": "rpatel-mbp",
+        "mac": "02:00:00:00:00:02",
+        "kind": "laptop",
+        "segment": "Corp",
+        "owner": "rpatel",
+        "ip": "10.10.4.22"
+      },
+      {
+        "name": "gpu-ws-01",
+        "mac": "02:00:00:00:00:03",
+        "kind": "workstation",
+        "segment": "Corp",
+        "owner": null,
+        "ip": "10.10.5.10"
+      },
+      {
+        "name": "nextseq-2000",
+        "mac": "02:00:00:00:00:11",
+        "kind": "instrument",
+        "segment": "Lab",
+        "owner": null,
+        "ip": "10.20.1.5"
+      },
+      {
+        "name": "confocal-lsm980",
+        "mac": "02:00:00:00:00:12",
+        "kind": "instrument",
+        "segment": "Lab",
+        "owner": null,
+        "ip": "10.20.1.6"
+      },
+      {
+        "name": "daq-rig-2",
+        "mac": "02:00:00:00:00:13",
+        "kind": "instrument",
+        "segment": "Lab",
+        "owner": null,
+        "ip": "10.20.1.7"
+      },
+      {
+        "name": "lab-printer-1",
+        "mac": "02:00:00:00:00:14",
+        "kind": "printer",
+        "segment": "Lab",
+        "owner": null,
+        "ip": "10.20.2.9"
+      },
+      {
+        "name": "cam-vivarium-1",
+        "mac": "02:00:00:00:00:21",
+        "kind": "camera",
+        "segment": "IoT",
+        "owner": null,
+        "ip": "10.30.7.11"
+      },
+      {
+        "name": "cam-loading-dock",
+        "mac": "02:00:00:00:00:22",
+        "kind": "camera",
+        "segment": "IoT",
+        "owner": null,
+        "ip": "10.30.7.12"
+      },
+      {
+        "name": "badge-main-door",
+        "mac": "02:00:00:00:00:23",
+        "kind": "badge-reader",
+        "segment": "IoT",
+        "owner": null,
+        "ip": "10.30.8.4"
+      },
+      {
+        "name": "freezer-temp-1",
+        "mac": "02:00:00:00:00:24",
+        "kind": "sensor",
+        "segment": "IoT",
+        "owner": null,
+        "ip": "10.30.9.30"
+      },
+      {
+        "name": "visitor-phone",
+        "mac": "02:00:00:00:00:31",
+        "kind": "guest",
+        "segment": "Guest",
+        "owner": null,
+        "ip": "10.40.1.55"
+      },
+      {
+        "name": "cam-server-room",
+        "mac": "02:00:00:00:00:25",
+        "kind": "camera",
+        "segment": "Corp",
+        "owner": null,
+        "ip": "10.10.9.99"
+      }
+    ],
+    "policy": [
+      [
+        "Corp",
+        "IoT"
+      ],
+      [
+        "Corp",
+        "Lab"
+      ],
+      [
+        "Corp",
+        "Mgmt"
+      ],
+      [
+        "Lab",
+        "Mgmt"
+      ]
+    ]
+  },
   "all_groups": [
     "Bio",
     "CI-Operators",

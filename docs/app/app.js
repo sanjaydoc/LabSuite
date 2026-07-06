@@ -57,6 +57,55 @@ class DemoEngine {
     this.safety = ops.safety || [];
     this.requests = (data.requests || []).map((r) => ({ ...r }));
     this.reqCounter = this._maxReq();
+    // network: VLAN segments + devices + east-west policy
+    const net = data.network || {};
+    this.segments = {};
+    for (const s of net.segments || []) this.segments[s.name] = { ...s };
+    this.netDevices = (net.devices || []).map((d) => ({ ...d }));
+    this.netPolicy = new Set((net.policy || []).map((p) => p[0] + "->" + p[1]));
+  }
+
+  // ---- network / segmentation --------------------------------------
+  canReach(src, dst) {
+    if (!this.segments[src] || !this.segments[dst]) return { allowed: false, reason: "unknown segment" };
+    if (src === dst) return { allowed: true, reason: "same segment (intra-VLAN)" };
+    if (this.netPolicy.has(src + "->" + dst)) return { allowed: true, reason: `firewall rule allows ${src} → ${dst}` };
+    return { allowed: false, reason: `default-deny: no rule permits ${src} → ${dst}` };
+  }
+  checkSegmentation(src, dst) {
+    const r = this.canReach(src, dst);
+    this.log("network", "network.check", `${src}->${dst}`, r.allowed ? "success" : "denied", r.reason);
+    return { src, dst, ...r };
+  }
+  moveDevice(name, segment) {
+    const d = this.netDevices.find((x) => x.name === name);
+    if (!d || !this.segments[segment]) return null;
+    d.segment = segment;
+    this.log("network", "network.move", name, "success", `-> ${segment}`);
+    return d;
+  }
+  netFlags() {
+    const expected = { laptop: "Corp", workstation: "Corp", instrument: "Lab", printer: "Lab",
+      camera: "IoT", "badge-reader": "IoT", sensor: "IoT", guest: "Guest" };
+    const out = [];
+    for (const d of this.netDevices) {
+      const exp = expected[d.kind];
+      if (exp && this.segments[exp] && d.segment !== exp) {
+        const seg = this.segments[d.segment];
+        const sev = seg && (seg.trust === "high" || seg.trust === "medium") && exp === "IoT" ? "MISPLACED" : "off-segment";
+        out.push(`${d.name} (${d.kind}): ${sev} on ${d.segment} — expected ${exp}`);
+      }
+    }
+    return out;
+  }
+  networkSummary() {
+    return {
+      segments: Object.values(this.segments).sort((a, b) => a.vlan_id - b.vlan_id),
+      devices: this.netDevices.slice().sort((a, b) => (a.segment + a.name).localeCompare(b.segment + b.name)),
+      policy: [...this.netPolicy].map((p) => p.split("->")),
+      flags: this.netFlags(),
+      device_count: this.netDevices.length,
+    };
   }
 
   // ---- compliance ---------------------------------------------------
@@ -421,6 +470,9 @@ const demoBackend = {
   async approveRequest(id) { engine.approveRequest(id); },
   async denyRequest(id, note) { engine.denyRequest(id, note); },
   async enrollMfa(u) { engine.enrollMfa(u); },
+  async network() { return engine.networkSummary(); },
+  async netCheck(src, dst) { return engine.checkSegmentation(src, dst); },
+  async netMove(name, segment) { engine.moveDevice(name, segment); },
   async usernames() { return Object.keys(engine.users).sort(); },
 };
 
@@ -482,6 +534,9 @@ const liveBackend = {
   async approveRequest(id) { await this._post("/requests/approve", { request_id: id }); },
   async denyRequest(id, note) { await this._post("/requests/deny", { request_id: id, note }); },
   async enrollMfa(u) { await this._post("/mfa/enroll", { username: u }); },
+  async network() { try { return await this._json("/network"); } catch { return { segments: [], devices: [], policy: [], flags: [] }; } },
+  async netCheck(src, dst) { return this._post("/network/check", { src, dst }); },
+  async netMove(name, segment) { await this._post("/network/move", { device: name, segment }); },
   async usernames() {
     try { return (await this._json("/scim/v2/Users")).Resources.map((u) => u.userName).sort(); }
     catch { return Object.keys(engine.users).sort(); }
@@ -861,6 +916,73 @@ async function renderOps() {
   });
 }
 
+const _trustChip = (t) => {
+  const cls = t === "high" ? "allow" : t === "none" || t === "low" ? "deny" : "";
+  return `<span class="chip ${cls}">${esc(t)}</span>`;
+};
+
+async function renderNetwork() {
+  const s = await backend.network();
+  const segs = s.segments || [];
+  const segRows = segs.map((seg) => `<tr>
+    <td><span class="tag">VLAN ${seg.vlan_id}</span></td><td><b>${esc(seg.name)}</b></td>
+    <td class="mono" style="font-size:.82rem">${esc(seg.cidr)}</td>
+    <td>${_trustChip(seg.trust)}</td>
+    <td>${seg.internet ? '<span class="chip">internet</span>' : '<span class="chip deny">no egress</span>'}</td>
+    <td class="muted">${esc(seg.purpose || "")}</td></tr>`).join("");
+  const devRows = (s.devices || []).map((d) => {
+    const misplaced = (s.flags || []).some((f) => f.startsWith(d.name + " "));
+    return `<tr><td>${esc(d.name)}</td><td><span class="tag">${esc(d.kind)}</span></td>
+      <td>${misplaced ? '<span class="chip deny">' + esc(d.segment) + '</span>' : '<span class="tag">' + esc(d.segment) + '</span>'}</td>
+      <td class="mono" style="font-size:.82rem">${esc(d.ip || "")}</td><td class="muted">${esc(d.owner || "—")}</td>
+      <td>${misplaced ? _actBtn("quarantine", `data-dev="${esc(d.name)}"`, "move → IoT") : ""}</td></tr>`;
+  }).join("");
+  // segmentation matrix
+  const names = segs.map((x) => x.name);
+  const head = `<tr><th>from ╲ to</th>${names.map((n) => `<th>${esc(n)}</th>`).join("")}</tr>`;
+  const matrix = names.map((src) => `<tr><td><b>${esc(src)}</b></td>${names.map((dst) => {
+    const r = engineReach(s, src, dst);
+    return `<td class="center">${r ? '<span class="chip allow" style="padding:.1rem .4rem">✓</span>' : '<span class="muted">·</span>'}</td>`;
+  }).join("")}</tr>`).join("");
+  const flags = (s.flags || []).length
+    ? (s.flags).map((f) => `<div class="flag"><span class="bang">!</span> ${esc(f)}</div>`).join("")
+    : '<div class="chip allow">✓ every device is on its expected segment</div>';
+  byId("net-body").innerHTML = `
+    <div class="card" style="margin-bottom:16px"><div class="label" style="margin-bottom:8px">Segmentation flags</div><div class="flags">${flags}</div></div>
+    <div class="grid2">
+      <div class="card"><div class="label" style="margin-bottom:6px">VLAN segments</div><table><tr><th>VLAN</th><th>Name</th><th>Subnet</th><th>Trust</th><th>Egress</th><th>Purpose</th></tr>${segRows}</table></div>
+      <div class="card"><div class="label" style="margin-bottom:6px">East-west policy (default deny)</div><table>${head}${matrix}</table>
+        <p class="muted" style="font-size:.8rem;margin:.7rem 0 0">✓ = the firewall permits traffic initiated from the row VLAN toward the column VLAN.</p></div>
+    </div>
+    <div class="card" style="margin-top:16px"><div class="label" style="margin-bottom:6px">Devices</div>
+      <table><tr><th>Device</th><th>Kind</th><th>Segment</th><th>IP</th><th>Owner</th><th></th></tr>${devRows}</table></div>
+    <div class="card" style="margin-top:16px">
+      <div class="label" style="margin-bottom:6px">Reachability check</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div class="field" style="margin:0"><label>From</label><select id="net-src">${names.map((n) => `<option>${esc(n)}</option>`).join("")}</select></div>
+        <div class="field" style="margin:0"><label>To</label><select id="net-dst">${names.map((n) => `<option>${esc(n)}</option>`).join("")}</select></div>
+        <button class="btn btn-sm" id="net-check">Check</button>
+      </div>
+      <div id="net-decision" style="margin-top:14px"></div>
+    </div>`;
+  $$("#net-body button.act").forEach((b) => b.onclick = async () => {
+    await backend.netMove(b.dataset.dev, "IoT"); renderNetwork();
+  });
+  byId("net-check").onclick = async () => {
+    const src = byId("net-src").value, dst = byId("net-dst").value;
+    const d = await backend.netCheck(src, dst);
+    byId("net-decision").innerHTML = `${chip(d.allowed)}
+      <span style="margin-left:.6rem">${esc(src)} → ${esc(dst)}</span>
+      <div class="muted" style="font-size:.85rem;margin-top:.4rem">${esc(d.reason)}</div>`;
+  };
+}
+
+// Recompute a matrix cell from the summary's policy (works for demo + live).
+function engineReach(summary, src, dst) {
+  if (src === dst) return true;
+  return (summary.policy || []).some((p) => p[0] === src && p[1] === dst);
+}
+
 function renderArchitecture() {
   byId("arch").innerHTML = `
     <div style="display:grid;gap:12px;max-width:560px">
@@ -906,7 +1028,7 @@ const RENDERERS = {
   overview: renderOverview, directory: renderDirectory, explorer: renderExplorer,
   review: renderReview, audit: renderAudit, architecture: renderArchitecture,
   devices: renderDevices, compliance: renderCompliance, saas: renderSaas, ops: renderOps,
-  requests: renderRequests,
+  requests: renderRequests, network: renderNetwork,
 };
 
 function go(view) {

@@ -95,6 +95,7 @@ def main() -> None:
         "compliance_records": cp.compliance.all_records(),
         "mfa_enrolled": sorted(u.username for u in cp.okta.list_users() if cp.okta.is_mfa_enrolled(u.username)),
         "operations": cp.ops.to_dict(),
+        "network": cp.network.to_dict(),
         "all_groups": sorted({g.name for g in cp.ad.groups.values()} | set(cp.okta.groups)),
         "requests": cp.requests.to_dict()["requests"],
         "users": users,

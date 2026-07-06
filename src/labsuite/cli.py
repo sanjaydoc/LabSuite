@@ -310,6 +310,25 @@ def cmd_devices(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_alerts(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    ac = cp.action_center()
+    _header("Action center")
+    c = ac["counts"]
+    print(f"  {_c(str(c['high']) + ' high', RED)}   "
+          f"{_c(str(c['medium']) + ' medium', CYAN)}   "
+          f"{DIM}{c['info']} info{RESET}")
+    if not ac["alerts"]:
+        print(_c("  all clear -- nothing needs attention", GREEN))
+        return 0
+    sev_colour = {"high": RED, "medium": CYAN, "info": DIM}
+    for a in ac["alerts"]:
+        mark = _c("●", sev_colour.get(a["severity"], DIM))
+        detail = f"  {DIM}{a['detail']}{RESET}" if a["detail"] else ""
+        print(f"  {mark} [{a['category']:9}] {a['title']}{detail}")
+    return 0
+
+
 def cmd_net(args: argparse.Namespace) -> int:
     cp = _load_or_build(args.state)
     # A single reachability check?
@@ -609,6 +628,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--move", nargs=2, metavar=("DEVICE", "SEGMENT"), help="move a device onto another VLAN")
     p.set_defaults(func=cmd_net)
 
+    sub.add_parser("alerts", help="action center -- every outstanding flag in one feed").set_defaults(func=cmd_alerts)
     sub.add_parser("ops", help="operations dashboard (SaaS spend + flags)").set_defaults(func=cmd_ops)
     sub.add_parser("saas", help="SaaS licences + cost").set_defaults(func=cmd_saas)
     sub.add_parser("assets", help="equipment + maintenance").set_defaults(func=cmd_assets)

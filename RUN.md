@@ -51,16 +51,26 @@ labsuite train  --user nrahman --training IACUC          # complete a training
 labsuite train  --user nrahman --training Biosafety --expire   # lapse it (revokes gated access)
 labsuite compliance                                       # all training records
 
+# MFA + conditional access (sensitive shares require Okta Verify)
+labsuite mfa --user nrahman                # show enrollment status
+labsuite mfa --user nrahman --enroll       # enroll -> unlocks conditional-access data
+
 # Access requests + approvals (self-service governance)
 labsuite request --user lpark --group Data-Science --why "ML side-project"
 labsuite requests                         # the request queue
 labsuite approve --id REQ-0001            # grant it (Okta -> AD)
 labsuite deny --id REQ-0002 --note "not justified"
 
+# Network segmentation (VLANs + IoT)
+labsuite net                              # segments, devices, segmentation flags
+labsuite net --check IoT Corp             # test east-west reachability (default-deny)
+labsuite net --move cam-server-room IoT   # re-place a device onto another VLAN
+
 # Governance + operations
 labsuite login   --user anguyen           # demo password is used by default
 labsuite sync                             # run the SCIM reconcile
 labsuite review                           # access review + anomaly flags
+labsuite alerts                           # action center — every flag in one feed
 labsuite devices                          # managed laptop fleet
 labsuite ops                              # ops dashboard (SaaS spend + flags)
 labsuite saas                             # SaaS licences + cost
@@ -103,6 +113,9 @@ labsuite serve                 # http://127.0.0.1:8000
 - `GET  /me`                      — resolve the bearer token's identity + access
 - `POST /admin/onboard` / `offboard`, `POST /sync`, `GET /access/{user}`, `GET /review`
 - `GET /devices`, `GET /compliance`, `POST /compliance/complete` · `/expire`
+- `POST /mfa/enroll` — enroll a user in MFA (Okta Verify)
+- `GET /alerts` — the action center (every outstanding flag, with counts)
+- `GET /network`, `POST /network/check` · `/network/move` — VLAN segmentation
 - `GET /ops`, `GET /saas`, `GET /assets`, `GET /inventory`, `GET /vendors`, `GET /safety`
 - `POST /assets/maintenance`, `/inventory/reorder`, `/safety/resolve`, `/vendors/renew`, `/saas/grant`, `/saas/revoke`
 - `GET /requests`, `POST /requests` · `/requests/approve` · `/requests/deny`

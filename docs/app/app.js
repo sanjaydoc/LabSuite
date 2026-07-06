@@ -108,6 +108,38 @@ class DemoEngine {
     };
   }
 
+  // ---- action center: aggregate every outstanding flag --------------
+  actionCenter() {
+    const alerts = [];
+    const add = (severity, category, title, view, detail = "") => alerts.push({ severity, category, title, view, detail });
+    for (const username in this.users) {
+      const u = this.users[username];
+      if (!u.active) {
+        const r = this.resolveAccess(username);
+        if (Object.keys(r.truenas).length || Object.keys(r.proxmox).length)
+          add("high", "access", `${username}: inactive but still has access`, "review");
+        continue;
+      }
+      const tr = this.trainingsFor(username);
+      for (const t in tr) if (tr[t] === "expired") add("high", "compliance", `${username}: ${t} training lapsed`, "compliance", "gated access auto-revoked");
+      if (!this.isMfaEnrolled(username)) add("medium", "mfa", `${username}: not enrolled in MFA`, "explorer", "conditional-access resources are blocked");
+    }
+    const ops = this.opsSummary();
+    for (const name of ops.overdue_equipment) add("high", "equipment", `Maintenance overdue: ${name}`, "ops");
+    for (const name of ops.low_stock) add("medium", "inventory", `Low stock: ${name}`, "ops");
+    for (const item of ops.open_safety) add("high", "safety", `Safety: ${item}`, "ops");
+    for (const seat of ops.orphaned_seats) add("medium", "saas", `Orphaned SaaS seat: ${seat}`, "saas");
+    for (const r of ops.upcoming_renewals) add("info", "vendor", `Renewal due: ${r}`, "ops");
+    for (const flag of this.netFlags()) add(flag.includes("MISPLACED") ? "high" : "medium", "network", flag, "network");
+    const pending = this.requests.filter((r) => r.status === "pending");
+    if (pending.length) add("info", "requests", `${pending.length} access request(s) awaiting approval`, "requests");
+    const order = { high: 0, medium: 1, info: 2 };
+    alerts.sort((a, b) => (order[a.severity] ?? 3) - (order[b.severity] ?? 3));
+    const counts = { high: 0, medium: 0, info: 0 };
+    for (const a of alerts) counts[a.severity]++;
+    return { alerts, counts, total: alerts.length };
+  }
+
   // ---- compliance ---------------------------------------------------
   missingForShare(username, share) {
     const req = this.gated[share] || [];
@@ -473,6 +505,7 @@ const demoBackend = {
   async network() { return engine.networkSummary(); },
   async netCheck(src, dst) { return engine.checkSegmentation(src, dst); },
   async netMove(name, segment) { engine.moveDevice(name, segment); },
+  async alerts() { return engine.actionCenter(); },
   async usernames() { return Object.keys(engine.users).sort(); },
 };
 
@@ -537,6 +570,7 @@ const liveBackend = {
   async network() { try { return await this._json("/network"); } catch { return { segments: [], devices: [], policy: [], flags: [] }; } },
   async netCheck(src, dst) { return this._post("/network/check", { src, dst }); },
   async netMove(name, segment) { await this._post("/network/move", { device: name, segment }); },
+  async alerts() { try { return await this._json("/alerts"); } catch { return { alerts: [], counts: { high: 0, medium: 0, info: 0 }, total: 0 }; } },
   async usernames() {
     try { return (await this._json("/scim/v2/Users")).Resources.map((u) => u.userName).sort(); }
     catch { return Object.keys(engine.users).sort(); }
@@ -612,6 +646,34 @@ async function renderOverview() {
   byId("ov-stats").innerHTML = [
     ["Identities", s.users], ["Active", s.active], ["TrueNAS shares", s.shares], ["Proxmox VMs", s.vms],
   ].map(([l, n]) => `<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+  await renderActionCenter();
+}
+
+const _sevDot = (sev) => `<span class="sev ${sev}" title="${sev}"></span>`;
+
+async function renderActionCenter() {
+  const ac = await backend.alerts();
+  const c = ac.counts || { high: 0, medium: 0, info: 0 };
+  const badges = `
+    <span class="chip ${c.high ? "deny" : "allow"}">${c.high} high</span>
+    <span class="chip">${c.medium} medium</span>
+    <span class="chip">${c.info} info</span>`;
+  const body = (ac.alerts || []).length
+    ? ac.alerts.map((a) => `<div class="alert-row" data-view="${esc(a.view)}">
+        ${_sevDot(a.severity)}
+        <span class="cat">${esc(a.category)}</span>
+        <span class="ttl">${esc(a.title)}${a.detail ? ` <span class="muted">— ${esc(a.detail)}</span>` : ""}</span>
+        <span class="go muted">${esc(a.view)} →</span></div>`).join("")
+    : '<div class="chip allow">✓ all clear — nothing needs attention</div>';
+  byId("ov-alerts").innerHTML = `
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem">
+        <div class="label">Action center</div><div class="tags">${badges}</div>
+      </div>
+      <hr class="divider" />
+      <div class="alerts-list">${body}</div>
+    </div>`;
+  $$("#ov-alerts .alert-row").forEach((el) => el.onclick = () => go(el.dataset.view));
 }
 
 async function renderDirectory() {

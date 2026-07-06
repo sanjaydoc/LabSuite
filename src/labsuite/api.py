@@ -155,6 +155,10 @@ def create_app(cp: ControlPlane | None = None) -> FastAPI:
     def review() -> dict:
         return control.access_review()
 
+    @app.get("/alerts")
+    def alerts() -> dict:
+        return control.action_center()
+
     @app.get("/audit")
     def audit(limit: int = 50) -> dict:
         events = [e.to_dict() for e in control.audit.tail(limit)]

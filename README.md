@@ -128,8 +128,11 @@ Delivery, Platform, Data-Science + Lab-Ops, Compliance, Facilities, Legal, IT):
 |---|---|---|
 | **Identity & access** | Onboard/offboard, SCIM sync, nested-group ACLs, audited allow/deny, access reviews | IT, everyone |
 | **Access requests & approvals** | Self-service request → reviewer approve/deny → auto-provisioned through the normal Okta→AD path, audited | IT, managers, everyone |
+| **MFA & conditional access** | Tracks Okta Verify enrollment; sensitive shares require MFA regardless of group membership, composing with the training gate | IT, Security, everyone |
 | **Endpoints / devices** | Images + ships a managed laptop per role (encryption, MDM, MFA, Iru/Ansible); wipe & return at offboard | IT |
 | **Compliance-gated access** | Training records (IACUC, biosafety…) that gate sensitive lab data; access auto-revokes when training lapses | Compliance, In-Vivo, IT |
+| **Network segmentation** | VLANs (Corp/Lab/IoT/Guest/Mgmt) with a default-deny east-west policy; device placement + IoT-segmentation flags; "can X reach Y?" checks | IT, Security |
+| **Action center** | One inbox aggregating every outstanding flag — lapsed training, MFA gaps, overdue maintenance, low stock, renewals, orphaned seats, segmentation misconfigs, pending requests | IT, everyone |
 | **SaaS & cost** | Who has a seat in what and **what it costs**; orphaned-seat detection; provisioned on onboard, reclaimed on offboard | IT, Finance |
 | **Equipment & maintenance** | Instrument registry with calibration/maintenance cadence; overdue + due-soon flags | Lab-Ops, Facilities |
 | **Inventory** | Reagents/consumables with reorder points; low-stock flags | Lab-Ops, Vector Core |
@@ -354,8 +357,9 @@ and Iru/Ansible config management), and offboarding flags it **wipe & return** �
 the "laptops imaged and shipped on day one, deprovisioned same-day" half of the
 brief.
 
-**Still out of scope, on purpose:** networking (VLANs, Wi-Fi) and SaaS-contract /
-license-cost tracking — candidate future modules, not simulated here.
+Networking is modelled too: `network.py` carries the VLAN segments
+(Corp/Lab/IoT/Guest/Mgmt), device placement, and a default-deny east-west policy,
+so IoT-segmentation misconfigurations surface as flags in the action center.
 
 ## In production: PowerShell / Ansible / Terraform
 
@@ -404,7 +408,9 @@ labsuite/
 │   ├── endpoints.py         # managed laptop fleet (image per role, wipe & return)
 │   ├── compliance.py        # training records that gate sensitive access
 │   ├── operations.py        # SaaS+cost · equipment · inventory · vendors · safety
-│   ├── engine.py            # the ControlPlane — onboard/offboard/resolve/check/review/ops
+│   ├── requests.py          # self-service access requests + approval queue
+│   ├── network.py           # VLAN segments · device placement · east-west policy
+│   ├── engine.py            # the ControlPlane — onboard/offboard/resolve/check/review/ops/alerts
 │   ├── policy.py            # role blueprints, image catalog, training + gating rules
 │   ├── audit.py             # append-only audit log
 │   ├── crypto.py            # PBKDF2 passwords + HS256 session tokens (stdlib only)

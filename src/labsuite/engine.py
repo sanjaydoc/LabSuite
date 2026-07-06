@@ -465,6 +465,66 @@ class ControlPlane:
         return self.scim.reconcile(actor=actor)
 
     # ------------------------------------------------------------------ #
+    # Action center -- one inbox aggregating every operational flag
+    # ------------------------------------------------------------------ #
+    def action_center(self) -> dict:
+        """Roll up every outstanding flag across the platform into one feed.
+
+        Each alert is ``{severity, category, title, detail, view}`` where ``view``
+        names the GUI panel that resolves it. Severity is ``high`` (act now),
+        ``medium`` (this week), or ``info`` (awareness). Returns the alert list
+        plus per-severity counts so the Overview can show a live badge.
+        """
+        alerts: list[dict] = []
+
+        def add(severity: str, category: str, title: str, view: str, detail: str = "") -> None:
+            alerts.append({"severity": severity, "category": category, "title": title, "view": view, "detail": detail})
+
+        # Identity / compliance: lapsed training and missing MFA on active staff.
+        for user in self.okta.list_users():
+            if not user.active:
+                # An inactive account that still resolves to access is a real leak.
+                report = self.resolve_access(user.username)
+                if report.truenas or report.proxmox:
+                    add("high", "access", f"{user.username}: inactive but still has access", "review")
+                continue
+            for training, status in self.compliance.trainings_for(user.username).items():
+                if status == "expired":
+                    add("high", "compliance", f"{user.username}: {training} training lapsed", "compliance",
+                        "gated access auto-revoked")
+            if not self.okta.is_mfa_enrolled(user.username):
+                add("medium", "mfa", f"{user.username}: not enrolled in MFA", "explorer",
+                    "conditional-access resources are blocked")
+
+        # Operations: maintenance, stock, renewals, orphaned seats, safety.
+        ops = self.ops.summary(self._is_active)
+        for name in ops["overdue_equipment"]:
+            add("high", "equipment", f"Maintenance overdue: {name}", "ops")
+        for name in ops["low_stock"]:
+            add("medium", "inventory", f"Low stock: {name}", "ops")
+        for item in ops["open_safety"]:
+            add("high", "safety", f"Safety: {item}", "ops")
+        for seat in ops["orphaned_seats"]:
+            add("medium", "saas", f"Orphaned SaaS seat: {seat}", "saas")
+        for renewal in ops["upcoming_renewals"]:
+            add("info", "vendor", f"Renewal due: {renewal}", "ops")
+
+        # Networking: segmentation anomalies.
+        for flag in self.network.flags():
+            sev = "high" if "MISPLACED" in flag else "medium"
+            add(sev, "network", flag, "network")
+
+        # Governance: access requests awaiting a decision.
+        pending = self.requests.pending()
+        if pending:
+            add("info", "requests", f"{len(pending)} access request(s) awaiting approval", "requests")
+
+        order = {"high": 0, "medium": 1, "info": 2}
+        alerts.sort(key=lambda a: order.get(a["severity"], 3))
+        counts = {sev: sum(1 for a in alerts if a["severity"] == sev) for sev in ("high", "medium", "info")}
+        return {"alerts": alerts, "counts": counts, "total": len(alerts)}
+
+    # ------------------------------------------------------------------ #
     # Access requests + approvals (self-service governance)
     # ------------------------------------------------------------------ #
     def request_access(self, requester: str, group: str, justification: str = "") -> AccessRequest:

@@ -246,6 +246,26 @@ Intune, Autopilot), networking (VLANs, Wi-Fi), and SaaS-contract tracking.
 LabSuite governs the **identity → infrastructure** half of onboarding; the
 endpoint half is a separate pillar and is not simulated here.
 
+## In production: PowerShell / Ansible / Terraform
+
+LabSuite implements the *logic* of the chain in one place so it runs and tests
+anywhere. In a real environment you drive the actual systems with the standard IT
+toolkit — imperative **PowerShell** (AD/Okta), declarative **Ansible** (config
+management), and **Terraform** (infrastructure-as-code). Every `labsuite` verb
+maps to a concrete real command:
+
+| Operation | Real-world equivalent |
+|---|---|
+| `labsuite onboard` | `New-ADUser` + `Add-ADGroupMember` · `microsoft.ad.user` · `okta_user` (Terraform) |
+| `labsuite offboard` | `Disable-ADAccount` + strip memberships · Okta `/lifecycle/deactivate` |
+| `ad.nest_group(...)` | `Add-ADGroupMember -Identity GPU-Cluster-Users -Members Research` |
+| `truenas.grant(...)` | TrueNAS `filesystem.setacl` (REST / `midclt`) |
+| `proxmox.grant(...)` | `pveum acl modify /pool/research --groups ... --roles PVEVMUser` |
+| `labsuite review` | `Get-ADGroupMember -Recursive` report, scheduled |
+
+**→ See [`docs/REAL_TOOLING.md`](docs/REAL_TOOLING.md)** for the full side-by-side
+command reference for every operation.
+
 ## How it fits the "first IT hire" brief
 
 | What the role asks for | Where it lives in LabSuite |

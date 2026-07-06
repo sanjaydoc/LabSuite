@@ -200,20 +200,30 @@ labsuite demo
 <details>
 <summary><b>Windows</b> (PowerShell)</summary>
 
+Need Python 3.12? Install it with `winget install -e --id Python.Python.3.12`, then **reopen PowerShell**.
+
 ```powershell
 git clone https://github.com/sanjaydoc/LabSuite.git
 cd LabSuite
 
 py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass   # allow venv activation (this window only)
+.\.venv\Scripts\Activate.ps1                                 # prompt now starts with (.venv)
 python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"   # core + API + test tooling  (or just: -e .)
+python -m pip install -e ".[dev]"                            # core + API + tests  (or just: -e .)
 
 labsuite demo
 ```
-> If PowerShell blocks the activate script, run once:
-> `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`.
-> On `cmd.exe` instead of PowerShell, activate with `.\.venv\Scripts\activate.bat`.
+
+**Reopening later** — in a fresh PowerShell window, reactivate the venv before using LabSuite:
+```powershell
+cd "C:\path\to\LabSuite"                                     # e.g. "C:\Users\ADMIN\Desktop\All Apps\LabSuite"
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
+> - `Set-ExecutionPolicy -Scope Process ...` only affects that one window (it resets when you close it), so it's safe.
+> - Quote any path containing spaces: `cd "C:\Users\ADMIN\Desktop\All Apps\LabSuite"`.
+> - On `cmd.exe` instead of PowerShell, activate with `.\.venv\Scripts\activate.bat` (no execution-policy step needed).
 </details>
 
 Drive individual operations:

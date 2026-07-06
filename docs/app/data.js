@@ -163,14 +163,33 @@ window.LABSUITE_DATA = {
       "ad_joined": true,
       "notes": "",
       "security_summary": "BitLocker + Okta Verify + Ansible"
+    },
+    "linux-eng": {
+      "name": "linux-eng",
+      "platform": "Linux",
+      "model": "ThinkPad X1 Carbon (Ubuntu 24.04 LTS)",
+      "encryption": "LUKS",
+      "mdm": "Fleet",
+      "mfa": "Okta Verify",
+      "config_mgmt": "Ansible",
+      "apps": [
+        "VS Code",
+        "Docker",
+        "CUDA toolkit",
+        "Slack",
+        "1Password CLI"
+      ],
+      "ad_joined": false,
+      "notes": "",
+      "security_summary": "LUKS + Okta Verify + Ansible"
     }
   },
   "role_image": {
-    "ml-scientist": "mac-standard",
+    "ml-scientist": "linux-eng",
     "research-scientist": "mac-standard",
     "invivo-scientist": "mac-standard",
     "vector-core": "mac-standard",
-    "platform-engineer": "mac-standard",
+    "platform-engineer": "linux-eng",
     "lab-technician": "win-lab",
     "lab-ops": "win-lab",
     "compliance": "mac-standard",
@@ -1313,18 +1332,18 @@ window.LABSUITE_DATA = {
     },
     {
       "asset_tag": "LT-0003",
-      "model": "MacBook Pro 14",
-      "platform": "macOS",
-      "image": "mac-standard",
+      "model": "ThinkPad X1 Carbon (Ubuntu 24.04 LTS)",
+      "platform": "Linux",
+      "image": "linux-eng",
       "assignee": "rpatel",
       "status": "assigned",
       "serial": "C02LT0003"
     },
     {
       "asset_tag": "LT-0004",
-      "model": "MacBook Pro 14",
-      "platform": "macOS",
-      "image": "mac-standard",
+      "model": "ThinkPad X1 Carbon (Ubuntu 24.04 LTS)",
+      "platform": "Linux",
+      "image": "linux-eng",
       "assignee": "mchen",
       "status": "assigned",
       "serial": "C02LT0004"
@@ -1349,9 +1368,9 @@ window.LABSUITE_DATA = {
     },
     {
       "asset_tag": "LT-0007",
-      "model": "MacBook Pro 14",
-      "platform": "macOS",
-      "image": "mac-standard",
+      "model": "ThinkPad X1 Carbon (Ubuntu 24.04 LTS)",
+      "platform": "Linux",
+      "image": "linux-eng",
       "assignee": "bokafor",
       "status": "assigned",
       "serial": "C02LT0007"

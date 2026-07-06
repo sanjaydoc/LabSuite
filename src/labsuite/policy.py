@@ -145,16 +145,26 @@ IMAGE_CATALOG: dict[str, DeviceImage] = {
         apps=["Acquisition software", "Slack", "GlobalProtect VPN", "1Password"],
         ad_joined=True,
     ),
+    "linux-eng": DeviceImage(
+        name="linux-eng",
+        platform="Linux",
+        model="ThinkPad X1 Carbon (Ubuntu 24.04 LTS)",
+        encryption="LUKS",
+        mdm="Fleet",  # osquery-based fleet management, idiomatic for Linux
+        mfa="Okta Verify",
+        config_mgmt="Ansible",
+        apps=["VS Code", "Docker", "CUDA toolkit", "Slack", "1Password CLI"],
+    ),
 }
 
 # Role -> image. Lab-facing Windows systems get win-lab; IT gets the admin build;
 # everyone else gets the standard managed Mac.
 ROLE_IMAGE: dict[str, str] = {
-    "ml-scientist": "mac-standard",
+    "ml-scientist": "linux-eng",       # GPU/ML work runs on Linux
     "research-scientist": "mac-standard",
     "invivo-scientist": "mac-standard",
     "vector-core": "mac-standard",
-    "platform-engineer": "mac-standard",
+    "platform-engineer": "linux-eng",  # automation/platform engineers on Linux
     "lab-technician": "win-lab",
     "lab-ops": "win-lab",
     "compliance": "mac-standard",

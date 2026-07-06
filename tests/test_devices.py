@@ -29,6 +29,16 @@ def test_it_admin_gets_admin_build():
     assert r.device["image"] == "mac-admin"
 
 
+def test_engineers_get_linux_build():
+    cp = build_lab()
+    r = cp.onboard("Priya Platform", Department.PLATFORM, "platform-engineer")
+    assert r.device["image"] == "linux-eng"
+    assert r.device["platform"] == "Linux"
+    # ML scientists too (GPU/ML workflows run on Linux).
+    ml = cp.onboard("Ravi ML", Department.DATA_SCIENCE, "ml-scientist")
+    assert ml.device["platform"] == "Linux"
+
+
 def test_offboard_flags_device_wipe_and_return():
     cp = build_lab()
     r = cp.onboard("Nadia Rahman", Department.BIO, "research-scientist")

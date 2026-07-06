@@ -19,7 +19,7 @@ from __future__ import annotations
 import abc
 from collections.abc import Iterable
 
-from labsuite.models import VM, AccessLevel, Department, Group, ProxmoxRole, Share, User
+from labsuite.models import VM, AccessLevel, Department, Device, Group, ProxmoxRole, Share, User
 
 
 class IdentityProvider(abc.ABC):
@@ -166,10 +166,31 @@ class ComputeProvider(abc.ABC):
     def objects_for(self, groups: set[str]) -> dict[int, ProxmoxRole]: ...
 
 
+class EndpointProvider(abc.ABC):
+    """The endpoint / device layer (an MDM: Kandji, Jamf, Intune, ...).
+
+    Owns the managed laptops: imaging a hire's device on day one and flagging it
+    for wipe & return at offboarding.
+    """
+
+    @abc.abstractmethod
+    def assign(self, username: str, image_name: str) -> Device: ...
+
+    @abc.abstractmethod
+    def wipe_and_return(self, username: str) -> Device | None: ...
+
+    @abc.abstractmethod
+    def device_for(self, username: str) -> Device | None: ...
+
+    @abc.abstractmethod
+    def list_devices(self) -> list[Device]: ...
+
+
 __all__ = [
     "IdentityProvider",
     "DirectoryProvider",
     "StorageProvider",
     "ComputeProvider",
+    "EndpointProvider",
     "Iterable",
 ]

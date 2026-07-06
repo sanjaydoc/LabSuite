@@ -297,11 +297,16 @@ reality, and where the boundaries are drawn honestly:
 | `ActiveDirectory` nested groups | AD security groups, `LDAP_MATCHING_RULE_IN_CHAIN` | `LdapDirectoryProvider` |
 | `TrueNAS` share ACLs | TrueNAS `/api/v2.0` dataset ACLs (AD SIDs) | `TrueNasApiStorageProvider` |
 | `Proxmox` path ACLs / roles | PVE `/api2/json/access/acl` | `ProxmoxApiComputeProvider` |
+| `DeviceFleet` laptop images | MDM — Kandji / Jamf / Intune | `MdmEndpointProvider` |
 
-**Out of scope, on purpose:** endpoint management (laptop imaging / MDM — Jamf,
-Intune, Autopilot), networking (VLANs, Wi-Fi), and SaaS-contract tracking.
-LabSuite governs the **identity → infrastructure** half of onboarding; the
-endpoint half is a separate pillar and is not simulated here.
+**Endpoint / devices:** onboarding also **images and ships a managed laptop** per
+role (`mac-standard`, `win-lab`, `mac-admin` — OS, disk encryption, MDM, Okta MFA,
+and Iru/Ansible config management), and offboarding flags it **wipe & return** —
+the "laptops imaged and shipped on day one, deprovisioned same-day" half of the
+brief.
+
+**Still out of scope, on purpose:** networking (VLANs, Wi-Fi) and SaaS-contract /
+license-cost tracking — candidate future modules, not simulated here.
 
 ## In production: PowerShell / Ansible / Terraform
 

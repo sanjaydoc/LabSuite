@@ -17,6 +17,7 @@ from pathlib import Path
 from labsuite.crypto import TokenError
 from labsuite.engine import ControlPlane
 from labsuite.models import Department
+from labsuite.policy import IMAGE_CATALOG
 from labsuite.seed import DEMO_PASSWORD, build_lab
 
 # --------------------------------------------------------------------------- #
@@ -99,6 +100,12 @@ def cmd_onboard(args: argparse.Namespace) -> int:
         print(f"  Proxmox  /vms/{vmid:<12} {role}")
     if not result.truenas_access and not result.proxmox_access:
         print(f"  {DIM}(no downstream access for this role){RESET}")
+    if result.device:
+        d = result.device
+        img = IMAGE_CATALOG[d["image"]]
+        _header("Device imaged & shipped (day one)")
+        print(f"  {d['model']} · image {_c(d['image'], CYAN)} · {img.security_summary()}")
+        print(f"  {DIM}asset {d['asset_tag']} · {d['platform']} · MDM {img.mdm}{RESET}")
     _save(cp, args.state)
     return 0
 
@@ -117,6 +124,9 @@ def cmd_offboard(args: argparse.Namespace) -> int:
     if not result.clean:
         print(f"    TrueNAS: {result.residual_truenas}")
         print(f"    Proxmox: {result.residual_proxmox}")
+    if result.device:
+        d = result.device
+        print(f"  device              : {d['asset_tag']} ({d['model']}) -> {_c('wipe & return', RED)}")
     _save(cp, args.state)
     return 0 if result.clean else 1
 
@@ -182,6 +192,18 @@ def cmd_review(args: argparse.Namespace) -> int:
         print(_c("  none -- estate is clean", GREEN))
     for flag in review["flags"]:
         print(f"  {_c('!', RED)} {flag}")
+    return 0
+
+
+def cmd_devices(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    _header("Managed device fleet")
+    devices = sorted(cp.endpoints.list_devices(), key=lambda d: d.asset_tag)
+    for d in devices:
+        flag = _c("wipe & return", RED) if d.status.value == "wipe & return" else _c(d.status.value, GREEN)
+        print(f"  {d.asset_tag}  {d.model:18} {d.image:12} {d.assignee or '-':10} {flag}")
+    if not devices:
+        print(f"  {DIM}(no devices){RESET}")
     return 0
 
 
@@ -322,6 +344,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_check)
 
     sub.add_parser("review", help="quarterly access review with anomaly flags").set_defaults(func=cmd_review)
+    sub.add_parser("devices", help="list the managed laptop fleet").set_defaults(func=cmd_devices)
     sub.add_parser("sync", help="run the SCIM reconcile now").set_defaults(func=cmd_sync)
 
     p = sub.add_parser("audit", help="print the audit trail")

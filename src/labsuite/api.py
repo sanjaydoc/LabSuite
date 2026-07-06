@@ -133,6 +133,10 @@ def create_app(cp: ControlPlane | None = None) -> FastAPI:
         events.reverse()  # most-recent first, matching the UI
         return {"events": events}
 
+    @app.get("/devices")
+    def devices() -> dict:
+        return {"devices": [d.to_dict() for d in control.endpoints.list_devices()]}
+
     # --------------------------------------------------------------- #
     # Web GUI + marketing site
     # --------------------------------------------------------------- #

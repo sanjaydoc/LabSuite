@@ -82,6 +82,72 @@ window.LABSUITE_DATA = {
     "vm.migrate": 3,
     "node.admin": 4
   },
+  "image_catalog": {
+    "mac-standard": {
+      "name": "mac-standard",
+      "platform": "macOS",
+      "model": "MacBook Pro 14",
+      "encryption": "FileVault",
+      "mdm": "Kandji",
+      "mfa": "Okta Verify",
+      "config_mgmt": "Iru",
+      "apps": [
+        "Slack",
+        "GlobalProtect VPN",
+        "1Password",
+        "Chrome"
+      ],
+      "ad_joined": false,
+      "notes": "",
+      "security_summary": "FileVault + Okta Verify + Iru"
+    },
+    "mac-admin": {
+      "name": "mac-admin",
+      "platform": "macOS",
+      "model": "MacBook Pro 16",
+      "encryption": "FileVault",
+      "mdm": "Kandji",
+      "mfa": "Okta Verify",
+      "config_mgmt": "Iru",
+      "apps": [
+        "Slack",
+        "GlobalProtect VPN",
+        "1Password",
+        "Chrome",
+        "admin tooling"
+      ],
+      "ad_joined": false,
+      "notes": "mac-standard + elevated IT admin tooling",
+      "security_summary": "FileVault + Okta Verify + Iru"
+    },
+    "win-lab": {
+      "name": "win-lab",
+      "platform": "Windows",
+      "model": "Dell Latitude 5550",
+      "encryption": "BitLocker",
+      "mdm": "Intune",
+      "mfa": "Okta Verify",
+      "config_mgmt": "Ansible",
+      "apps": [
+        "Acquisition software",
+        "Slack",
+        "GlobalProtect VPN",
+        "1Password"
+      ],
+      "ad_joined": true,
+      "notes": "",
+      "security_summary": "BitLocker + Okta Verify + Ansible"
+    }
+  },
+  "role_image": {
+    "research-scientist": "mac-standard",
+    "platform-engineer": "mac-standard",
+    "operations": "mac-standard",
+    "legal-counsel": "mac-standard",
+    "security-analyst": "mac-standard",
+    "lab-technician": "win-lab",
+    "it-admin": "mac-admin"
+  },
   "users": [
     {
       "username": "anguyen",
@@ -310,6 +376,80 @@ window.LABSUITE_DATA = {
       "path": "/pool/ci",
       "group": "CI-Operators",
       "role": 3
+    }
+  ],
+  "devices": [
+    {
+      "asset_tag": "LT-0001",
+      "model": "MacBook Pro 14",
+      "platform": "macOS",
+      "image": "mac-standard",
+      "assignee": "anguyen",
+      "status": "assigned",
+      "serial": "C02LT0001"
+    },
+    {
+      "asset_tag": "LT-0002",
+      "model": "MacBook Pro 14",
+      "platform": "macOS",
+      "image": "mac-standard",
+      "assignee": "gkim",
+      "status": "assigned",
+      "serial": "C02LT0002"
+    },
+    {
+      "asset_tag": "LT-0003",
+      "model": "MacBook Pro 14",
+      "platform": "macOS",
+      "image": "mac-standard",
+      "assignee": "bokafor",
+      "status": "assigned",
+      "serial": "C02LT0003"
+    },
+    {
+      "asset_tag": "LT-0004",
+      "model": "Dell Latitude 5550",
+      "platform": "Windows",
+      "image": "win-lab",
+      "assignee": "cdiaz",
+      "status": "assigned",
+      "serial": "C02LT0004"
+    },
+    {
+      "asset_tag": "LT-0005",
+      "model": "MacBook Pro 14",
+      "platform": "macOS",
+      "image": "mac-standard",
+      "assignee": "dlevy",
+      "status": "assigned",
+      "serial": "C02LT0005"
+    },
+    {
+      "asset_tag": "LT-0006",
+      "model": "MacBook Pro 14",
+      "platform": "macOS",
+      "image": "mac-standard",
+      "assignee": "epark",
+      "status": "assigned",
+      "serial": "C02LT0006"
+    },
+    {
+      "asset_tag": "LT-0007",
+      "model": "MacBook Pro 14",
+      "platform": "macOS",
+      "image": "mac-standard",
+      "assignee": "fito",
+      "status": "assigned",
+      "serial": "C02LT0007"
+    },
+    {
+      "asset_tag": "LT-0008",
+      "model": "MacBook Pro 16",
+      "platform": "macOS",
+      "image": "mac-admin",
+      "assignee": "sanbu",
+      "status": "assigned",
+      "serial": "C02LT0008"
     }
   ]
 };

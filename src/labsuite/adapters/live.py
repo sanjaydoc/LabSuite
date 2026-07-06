@@ -36,10 +36,11 @@ from __future__ import annotations
 from labsuite.adapters.base import (
     ComputeProvider,
     DirectoryProvider,
+    EndpointProvider,
     IdentityProvider,
     StorageProvider,
 )
-from labsuite.models import AccessLevel, Group, ProxmoxRole, Share, User
+from labsuite.models import AccessLevel, Device, Group, ProxmoxRole, Share, User
 
 _STUB = "live adapter not yet implemented -- wire the real API call here"
 
@@ -231,9 +232,32 @@ class ProxmoxApiComputeProvider(ComputeProvider):
         raise NotImplementedError(_STUB)
 
 
+class MdmEndpointProvider(EndpointProvider):
+    """Drive a real MDM (Kandji / Jamf / Intune) to image and wipe laptops."""
+
+    def __init__(self, *, base_url: str, api_token: str) -> None:
+        self.base_url = base_url
+        self.api_token = api_token
+
+    def assign(self, username: str, image_name: str) -> Device:
+        # look up/assign a device, apply the Blueprint/Profile for image_name
+        raise NotImplementedError(_STUB)
+
+    def wipe_and_return(self, username: str) -> Device | None:
+        # POST a remote-wipe / lock command for the user's enrolled device
+        raise NotImplementedError(_STUB)
+
+    def device_for(self, username: str) -> Device | None:
+        raise NotImplementedError(_STUB)
+
+    def list_devices(self) -> list[Device]:
+        raise NotImplementedError(_STUB)
+
+
 __all__ = [
     "OktaApiIdentityProvider",
     "LdapDirectoryProvider",
     "TrueNasApiStorageProvider",
     "ProxmoxApiComputeProvider",
+    "MdmEndpointProvider",
 ]

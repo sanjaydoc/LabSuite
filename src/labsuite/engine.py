@@ -26,13 +26,15 @@ from labsuite.active_directory import ActiveDirectory
 from labsuite.adapters.base import (
     ComputeProvider,
     DirectoryProvider,
+    EndpointProvider,
     IdentityProvider,
     StorageProvider,
 )
 from labsuite.audit import AuditLog
+from labsuite.endpoints import DeviceFleet
 from labsuite.models import AccessDecision, AccessLevel, Department, ProxmoxRole
 from labsuite.okta import OktaDirectory
-from labsuite.policy import onboarding_groups
+from labsuite.policy import image_for, onboarding_groups
 from labsuite.proxmox import Proxmox
 from labsuite.scim import ScimSync, SyncReport
 from labsuite.truenas import TrueNAS
@@ -54,6 +56,7 @@ class OnboardResult:
     sync: SyncReport
     truenas_access: dict[str, str] = field(default_factory=dict)
     proxmox_access: dict[int, str] = field(default_factory=dict)
+    device: dict | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -64,6 +67,7 @@ class OnboardResult:
             "sync": self.sync.to_dict(),
             "truenas_access": self.truenas_access,
             "proxmox_access": self.proxmox_access,
+            "device": self.device,
         }
 
 
@@ -74,6 +78,7 @@ class OffboardResult:
     sync: SyncReport
     residual_truenas: dict[str, str] = field(default_factory=dict)
     residual_proxmox: dict[int, str] = field(default_factory=dict)
+    device: dict | None = None
 
     @property
     def clean(self) -> bool:
@@ -87,6 +92,7 @@ class OffboardResult:
             "residual_truenas": self.residual_truenas,
             "residual_proxmox": self.residual_proxmox,
             "clean": self.clean,
+            "device": self.device,
         }
 
 
@@ -119,14 +125,16 @@ class ControlPlane:
         ad: DirectoryProvider | None = None,
         truenas: StorageProvider | None = None,
         proxmox: ComputeProvider | None = None,
+        endpoints: EndpointProvider | None = None,
         audit: AuditLog | None = None,
     ) -> None:
         # Any of these may be a real-system adapter; the control plane only ever
-        # speaks to the four provider interfaces.
+        # speaks to the provider interfaces.
         self.okta: IdentityProvider = okta or OktaDirectory()
         self.ad: DirectoryProvider = ad or ActiveDirectory()
         self.truenas: StorageProvider = truenas or TrueNAS()
         self.proxmox: ComputeProvider = proxmox or Proxmox()
+        self.endpoints: EndpointProvider = endpoints or DeviceFleet()
         self.audit = audit or AuditLog()
         self.scim = ScimSync(self.okta, self.ad, self.audit)
 
@@ -179,6 +187,13 @@ class ControlPlane:
 
         report = self.scim.reconcile(actor=actor)
 
+        # Endpoint half: image + ship a managed laptop for the role.
+        device = self.endpoints.assign(username, image_for(role))
+        self.audit.record(
+            actor, "device.provision", device.asset_tag, "endpoint",
+            detail=f"{device.model} · {device.image}",
+        )
+
         access = self.resolve_access(username)
         return OnboardResult(
             username=username,
@@ -188,6 +203,7 @@ class ControlPlane:
             sync=report,
             truenas_access=access.truenas,
             proxmox_access={int(k.split("/")[-1]): v for k, v in access.proxmox.items()},
+            device=device.to_dict(),
         )
 
     # ------------------------------------------------------------------ #
@@ -203,6 +219,13 @@ class ControlPlane:
         self.audit.record(actor, "user.deactivate", username, "okta", detail="offboard")
 
         report = self.scim.reconcile(actor=actor)
+
+        # Endpoint half: flag the managed laptop for wipe & return.
+        device = self.endpoints.wipe_and_return(username)
+        if device is not None:
+            self.audit.record(
+                actor, "device.wipe", device.asset_tag, "endpoint", detail="wipe & return",
+            )
 
         # Verification: after deprovisioning, effective access must be empty.
         groups = self.ad.effective_groups(username)
@@ -226,6 +249,7 @@ class ControlPlane:
             sync=report,
             residual_truenas=residual_nas,
             residual_proxmox={int(p.split("/")[-1]): r for p, r in residual_pve.items()},
+            device=device.to_dict() if device is not None else None,
         )
 
     # ------------------------------------------------------------------ #
@@ -342,6 +366,7 @@ class ControlPlane:
             "ad": self.ad.to_dict(),
             "truenas": self.truenas.to_dict(),
             "proxmox": self.proxmox.to_dict(),
+            "endpoints": self.endpoints.to_dict(),
             "audit": self.audit.to_list(),
         }
 
@@ -354,6 +379,7 @@ class ControlPlane:
             ad=ActiveDirectory.from_dict(data["ad"]),
             truenas=TrueNAS.from_dict(data["truenas"]),
             proxmox=Proxmox.from_dict(data["proxmox"]),
+            endpoints=DeviceFleet.from_dict(data.get("endpoints", {})),
             audit=audit,
         )
         return cp

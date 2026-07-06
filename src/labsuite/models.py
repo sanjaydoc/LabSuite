@@ -238,3 +238,81 @@ class AccessDecision:
             "via_groups": self.via_groups,
             "reason": self.reason,
         }
+
+
+class DeviceStatus(str, Enum):
+    """Lifecycle of a managed laptop."""
+
+    ASSIGNED = "assigned"  # imaged + shipped, in use
+    WIPE_RETURN = "wipe & return"  # flagged at offboarding
+    RETIRED = "retired"
+
+
+@dataclass
+class DeviceImage:
+    """A standardized laptop build (the "image") assigned to a hire by role."""
+
+    name: str
+    platform: str  # macOS | Windows | Linux
+    model: str  # default hardware model shipped
+    encryption: str  # FileVault | BitLocker
+    mdm: str  # Kandji | Intune | Jamf
+    mfa: str  # Okta Verify
+    config_mgmt: str  # Iru | Ansible
+    apps: list[str] = field(default_factory=list)
+    ad_joined: bool = False
+    notes: str = ""
+
+    def security_summary(self) -> str:
+        """e.g. 'FileVault + Okta Verify + Iru' -- the day-one hardening line."""
+        return f"{self.encryption} + {self.mfa} + {self.config_mgmt}"
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "platform": self.platform,
+            "model": self.model,
+            "encryption": self.encryption,
+            "mdm": self.mdm,
+            "mfa": self.mfa,
+            "config_mgmt": self.config_mgmt,
+            "apps": list(self.apps),
+            "ad_joined": self.ad_joined,
+            "notes": self.notes,
+        }
+
+
+@dataclass
+class Device:
+    """A specific managed laptop assigned to a person."""
+
+    asset_tag: str
+    model: str
+    platform: str
+    image: str  # DeviceImage.name
+    assignee: str | None
+    status: DeviceStatus = DeviceStatus.ASSIGNED
+    serial: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "asset_tag": self.asset_tag,
+            "model": self.model,
+            "platform": self.platform,
+            "image": self.image,
+            "assignee": self.assignee,
+            "status": self.status.value,
+            "serial": self.serial,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> Device:
+        return cls(
+            asset_tag=data["asset_tag"],
+            model=data["model"],
+            platform=data["platform"],
+            image=data["image"],
+            assignee=data.get("assignee"),
+            status=DeviceStatus(data["status"]),
+            serial=data.get("serial", ""),
+        )

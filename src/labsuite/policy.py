@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from labsuite.models import Department
+from labsuite.models import Department, DeviceImage
 
 # Every employee is in this baseline group (SSO to the standard SaaS bundle, MFA
 # enforcement, etc. in a real Okta org).
@@ -91,3 +91,66 @@ def onboarding_groups(department: Department, role: str) -> list[str]:
     for g in groups:
         seen.setdefault(g, None)
     return list(seen)
+
+
+# --------------------------------------------------------------------------- #
+# Endpoint policy: which standardized laptop build (image) a role receives.
+#
+# This is the "laptops imaged and shipped on day one" half of onboarding -- the
+# endpoint pillar. Each image is a full managed build: OS, disk encryption, an
+# MDM, MFA, and a config-management agent (Iru for Mac, Ansible/Intune for the
+# lab Windows machines), so a new hire's laptop is hardened and ready on arrival.
+# --------------------------------------------------------------------------- #
+_MAC_APPS = ["Slack", "GlobalProtect VPN", "1Password", "Chrome"]
+
+IMAGE_CATALOG: dict[str, DeviceImage] = {
+    "mac-standard": DeviceImage(
+        name="mac-standard",
+        platform="macOS",
+        model="MacBook Pro 14",
+        encryption="FileVault",
+        mdm="Kandji",
+        mfa="Okta Verify",
+        config_mgmt="Iru",
+        apps=_MAC_APPS,
+    ),
+    "mac-admin": DeviceImage(
+        name="mac-admin",
+        platform="macOS",
+        model="MacBook Pro 16",
+        encryption="FileVault",
+        mdm="Kandji",
+        mfa="Okta Verify",
+        config_mgmt="Iru",
+        apps=[*_MAC_APPS, "admin tooling"],
+        notes="mac-standard + elevated IT admin tooling",
+    ),
+    "win-lab": DeviceImage(
+        name="win-lab",
+        platform="Windows",
+        model="Dell Latitude 5550",
+        encryption="BitLocker",
+        mdm="Intune",
+        mfa="Okta Verify",
+        config_mgmt="Ansible",
+        apps=["Acquisition software", "Slack", "GlobalProtect VPN", "1Password"],
+        ad_joined=True,
+    ),
+}
+
+# Role -> image. Lab-facing Windows systems get win-lab; IT gets the admin build;
+# everyone else gets the standard managed Mac.
+ROLE_IMAGE: dict[str, str] = {
+    "research-scientist": "mac-standard",
+    "platform-engineer": "mac-standard",
+    "operations": "mac-standard",
+    "legal-counsel": "mac-standard",
+    "security-analyst": "mac-standard",
+    "lab-technician": "win-lab",
+    "it-admin": "mac-admin",
+}
+
+
+def image_for(role: str) -> str:
+    """The image a role is provisioned with (defaults to the standard Mac build)."""
+    return ROLE_IMAGE.get(role, "mac-standard")

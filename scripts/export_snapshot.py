@@ -14,7 +14,13 @@ import json
 from pathlib import Path
 
 from labsuite.models import PROXMOX_PRIVILEGES, AccessLevel, Department, ProxmoxRole
-from labsuite.policy import BASELINE_GROUP, DEPARTMENT_GROUP, ROLE_BLUEPRINTS
+from labsuite.policy import (
+    BASELINE_GROUP,
+    DEPARTMENT_GROUP,
+    IMAGE_CATALOG,
+    ROLE_BLUEPRINTS,
+    ROLE_IMAGE,
+)
 from labsuite.seed import DEMO_PASSWORD, build_lab
 
 OUT = Path(__file__).resolve().parent.parent / "docs" / "app" / "data.js"
@@ -58,6 +64,12 @@ def main() -> None:
 
     proxmox_acl = [{"path": a.path, "group": a.group, "role": int(a.role)} for a in cp.proxmox.acl]
 
+    image_catalog = {
+        name: {**img.to_dict(), "security_summary": img.security_summary()}
+        for name, img in IMAGE_CATALOG.items()
+    }
+    devices = [d.to_dict() for d in cp.endpoints.list_devices()]
+
     data = {
         "demo_password": DEMO_PASSWORD,
         "departments": [d.value for d in Department],
@@ -70,11 +82,14 @@ def main() -> None:
         "access_levels": {int(lvl): str(lvl) for lvl in AccessLevel},
         "proxmox_roles": {int(r): str(r) for r in ProxmoxRole},
         "proxmox_privileges": {p: int(r) for p, r in PROXMOX_PRIVILEGES.items()},
+        "image_catalog": image_catalog,
+        "role_image": dict(ROLE_IMAGE),
         "users": users,
         "ad_nesting": ad_nesting,
         "shares": shares,
         "vms": vms,
         "proxmox_acl": proxmox_acl,
+        "devices": devices,
     }
 
     banner = (

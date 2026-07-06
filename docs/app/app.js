@@ -31,7 +31,37 @@ class DemoEngine {
     this.parentsOf = {};
     for (const parent in data.ad_nesting)
       for (const child of data.ad_nesting[parent]) (this.parentsOf[child] ||= []).push(parent);
+    // managed device fleet
+    this.devices = {};
+    this.deviceByUser = {};
+    this.deviceCounter = 0;
+    for (const dev of data.devices || []) {
+      this.devices[dev.asset_tag] = { ...dev };
+      if (dev.assignee) this.deviceByUser[dev.assignee] = dev.asset_tag;
+      const n = parseInt(dev.asset_tag.replace(/\D/g, ""), 10);
+      if (n > this.deviceCounter) this.deviceCounter = n;
+    }
   }
+
+  assignDevice(username, role) {
+    const imageName = this.d.role_image[role] || "mac-standard";
+    const img = this.d.image_catalog[imageName];
+    let tag = this.deviceByUser[username];
+    if (!tag) { this.deviceCounter++; tag = "LT-" + String(this.deviceCounter).padStart(4, "0"); }
+    const dev = { asset_tag: tag, model: img.model, platform: img.platform, image: imageName,
+      assignee: username, status: "assigned", serial: "C02" + tag.replace(/-/g, "") };
+    this.devices[tag] = dev; this.deviceByUser[username] = tag;
+    return dev;
+  }
+
+  wipeDevice(username) {
+    const tag = this.deviceByUser[username];
+    if (!tag) return null;
+    this.devices[tag].status = "wipe & return";
+    return this.devices[tag];
+  }
+
+  listDevices() { return Object.values(this.devices); }
 
   log(system, action, target, outcome = "success", detail = "") {
     this.audit.push({ system, action, target, outcome, detail });
@@ -107,10 +137,12 @@ class DemoEngine {
     this.users[username] = { username, display_name: name, email, department: dept, title: role, active: true, okta_groups: groups };
     this.log("okta", "user.create", username, "success", `role=${role}`);
     this.log("ad", "user.provision", username, "success", "SCIM create");
+    const device = this.assignDevice(username, role);
+    this.log("endpoint", "device.provision", device.asset_tag, "success", `${device.model} · ${device.image}`);
     const access = this.resolveAccess(username);
     const proxmox = {};
     for (const vmid in this.d.vms) { const p = this.d.vms[vmid].path; if (access.proxmox[p]) proxmox[vmid] = access.proxmox[p]; }
-    return { username, email, temp_password: passphrase(), okta_groups: groups, truenas: access.truenas, proxmox };
+    return { username, email, temp_password: passphrase(), okta_groups: groups, truenas: access.truenas, proxmox, device };
   }
 
   offboard(username) {
@@ -119,10 +151,12 @@ class DemoEngine {
     u.okta_groups = []; u.active = false;
     this.log("okta", "user.deactivate", username, "success", "offboard");
     this.log("ad", "user.deactivate", username, "success", "SCIM deactivate");
+    const device = this.wipeDevice(username);
+    if (device) this.log("endpoint", "device.wipe", device.asset_tag, "success", "wipe & return");
     const a = this.resolveAccess(username);
     const clean = Object.keys(a.truenas).length === 0 && Object.keys(a.proxmox).length === 0;
     this.log("control-plane", "offboard.verify", username, clean ? "success" : "error", clean ? "zero residual" : "RESIDUAL");
-    return { username, removed_groups: removed, clean, residual_truenas: a.truenas, residual_proxmox: a.proxmox };
+    return { username, removed_groups: removed, clean, residual_truenas: a.truenas, residual_proxmox: a.proxmox, device };
   }
 
   checkTruenas(username, share, action) {
@@ -206,6 +240,7 @@ const demoBackend = {
   async review() { return engine.review(); },
   async login(u, p) { return engine.login(u, p); },
   async audit() { return engine.audit.slice().reverse(); },
+  async devices() { return engine.listDevices(); },
   async usernames() { return Object.keys(engine.users).sort(); },
 };
 
@@ -230,11 +265,11 @@ const liveBackend = {
   async resolve(u) { return this._json(`/access/${u}`); },
   async onboard(name, dept, role) {
     const r = await this._json("/admin/onboard", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, department: dept, role }) });
-    return { username: r.username, email: r.email, temp_password: r.temp_password, okta_groups: r.okta_groups, truenas: r.truenas_access, proxmox: r.proxmox_access };
+    return { username: r.username, email: r.email, temp_password: r.temp_password, okta_groups: r.okta_groups, truenas: r.truenas_access, proxmox: r.proxmox_access, device: r.device };
   },
   async offboard(u) {
     const r = await this._json("/admin/offboard", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: u }) });
-    return { username: u, removed_groups: r.removed_groups, clean: r.clean, residual_truenas: r.residual_truenas, residual_proxmox: r.residual_proxmox };
+    return { username: u, removed_groups: r.removed_groups, clean: r.clean, residual_truenas: r.residual_truenas, residual_proxmox: r.residual_proxmox, device: r.device };
   },
   async checkTruenas() { throw new Error("live check via explorer resolve"); },
   async checkProxmox() { throw new Error("live check via explorer resolve"); },
@@ -245,6 +280,7 @@ const liveBackend = {
     } catch { return { ok: false }; }
   },
   async audit() { try { return (await this._json("/audit")).events; } catch { return []; } },
+  async devices() { try { return (await this._json("/devices")).devices; } catch { return []; } },
   async usernames() {
     try { return (await this._json("/scim/v2/Users")).Resources.map((u) => u.userName).sort(); }
     catch { return Object.keys(engine.users).sort(); }
@@ -332,8 +368,23 @@ async function doOnboard() {
       <span class="k">temp password</span><span class="mono">${esc(r.temp_password)}</span>
       <span class="k">Okta groups</span><span class="tags">${r.okta_groups.map((g) => `<span class="tag">${esc(g)}</span>`).join("")}</span>
     </div>
-    <div class="grid2"><div><div class="label">TrueNAS</div><table>${nas}</table></div><div><div class="label">Proxmox</div><table>${pve}</table></div></div>`;
+    <div class="grid2"><div><div class="label">TrueNAS</div><table>${nas}</table></div><div><div class="label">Proxmox</div><table>${pve}</table></div></div>
+    ${deviceCard(r.device, "imaged & shipped (day one)")}`;
   await refreshUserSelects();
+}
+
+function deviceCard(dev, tagline) {
+  if (!dev) return "";
+  const img = D.image_catalog[dev.image] || {};
+  return `<hr class="divider" />
+    <div class="label">Device — ${esc(tagline)}</div>
+    <div style="display:flex;align-items:center;gap:.6rem;margin-top:.35rem;flex-wrap:wrap">
+      <b>${esc(dev.model)}</b>
+      <span class="tag">${esc(dev.image)}</span>
+      <span class="chip">${esc(dev.platform)}</span>
+      ${dev.status === "wipe & return" ? '<span class="chip deny">wipe &amp; return</span>' : '<span class="chip allow">assigned</span>'}
+    </div>
+    <div class="muted" style="font-size:.85rem;margin-top:.35rem">${esc(img.security_summary || "")} · MDM ${esc(img.mdm || "")} · asset ${esc(dev.asset_tag)}</div>`;
 }
 
 async function doOffboard() {
@@ -348,8 +399,24 @@ async function doOffboard() {
       ? '<span class="chip allow">✓ CLEAN — zero residual access</span>'
       : '<span class="chip deny">✗ RESIDUAL ACCESS REMAINS</span>'}</div>
     ${r.clean ? '<p class="muted" style="margin:.8rem 0 0;font-size:.88rem">Re-resolved across TrueNAS + Proxmox after deprovisioning — nothing remains.</p>'
-      : `<pre>${esc(JSON.stringify({ truenas: r.residual_truenas, proxmox: r.residual_proxmox }, null, 2))}</pre>`}`;
+      : `<pre>${esc(JSON.stringify({ truenas: r.residual_truenas, proxmox: r.residual_proxmox }, null, 2))}</pre>`}
+    ${deviceCard(r.device, "flagged for return")}`;
   await refreshUserSelects();
+}
+
+async function renderDevices() {
+  const rows = (await backend.devices()).slice().sort((a, b) => a.asset_tag.localeCompare(b.asset_tag));
+  const body = rows.map((d) => {
+    const img = D.image_catalog[d.image] || {};
+    const status = d.status === "wipe & return"
+      ? '<span class="chip deny">wipe &amp; return</span>' : '<span class="chip allow">assigned</span>';
+    return `<tr><td>${esc(d.asset_tag)}</td><td>${esc(d.model)}</td>
+      <td><span class="tag">${esc(d.image)}</span></td><td>${esc(d.platform)}</td>
+      <td class="muted">${esc(img.security_summary || "")}</td>
+      <td>${esc(d.assignee || "—")}</td><td>${status}</td></tr>`;
+  }).join("");
+  byId("dev-table").innerHTML =
+    `<tr><th>Asset</th><th>Model</th><th>Image</th><th>OS</th><th>Baseline</th><th>Assignee</th><th>Status</th></tr>${body}`;
 }
 
 async function renderExplorer() {
@@ -466,6 +533,7 @@ async function refreshUserSelects() {
 const RENDERERS = {
   overview: renderOverview, directory: renderDirectory, explorer: renderExplorer,
   review: renderReview, audit: renderAudit, architecture: renderArchitecture,
+  devices: renderDevices,
 };
 
 function go(view) {

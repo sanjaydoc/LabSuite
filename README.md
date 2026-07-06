@@ -199,7 +199,7 @@ onboarding, access resolution, and reviews with nothing installed.
   </tr>
   <tr>
     <td width="50%"><img src="docs/media/dashboard-overview.png" alt="Dashboard overview with stat tiles and the identity chain" /></td>
-    <td width="50%"><img src="docs/media/dashboard-onboard.png" alt="Onboard form and the provisioned result" /></td>
+    <td width="50%"><img src="docs/media/dashboard-onboard-result.png" alt="Onboard form and the provisioned result" /></td>
   </tr>
   <tr>
     <td align="center"><sub><b>Overview</b> — the seeded lab at a glance.</sub></td>

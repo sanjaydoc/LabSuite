@@ -123,9 +123,9 @@ p { margin: 0 0 1rem; color: var(--ink-2); }
 
 /* --- chips / status ---------------------------------------------------- */
 .chip {
-  display: inline-flex; align-items: center; gap: .4rem;
-  font-size: .78rem; font-weight: 600;
-  padding: .2rem .6rem; border-radius: var(--pill);
+  display: inline-flex; align-items: center; gap: .4rem; white-space: nowrap;
+  font-size: .78rem; font-weight: 600; line-height: 1.35;
+  padding: .18rem .55rem; border-radius: var(--pill);
   border: 1px solid var(--hair); color: var(--ink-2); background: var(--paper-2);
 }
 .chip.allow { color: var(--ok); background: var(--ok-bg); border-color: #cfe6da; }

@@ -84,19 +84,32 @@ p { margin: 0 0 1rem; color: var(--ink-2); }
   font-weight: 600;
 }
 
-/* --- buttons: black pill with arrow ------------------------------------ */
+/* --- buttons: Merge-style pills ---------------------------------------- *
+ * Two tiers, matching merge.io:
+ *   .btn            solid black PILL  — primary CTAs ("Join us! →")
+ *   .btn.ghost/.act white OUTLINE pill — secondary/inline ("Upload file")
+ * Everything is fully rounded (border-radius: 999px). */
 .btn {
-  display: inline-flex; align-items: center; gap: .5rem; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem; white-space: nowrap;
   background: var(--ink); color: #fff;
-  font-family: var(--sans); font-weight: 700; font-size: .95rem;
-  padding: .72rem 1.15rem; border: 0; border-radius: 12px; cursor: pointer;
-  transition: transform .12s ease, opacity .12s ease;
+  font-family: var(--sans); font-weight: 600; font-size: .95rem;
+  padding: .68rem 1.4rem; border: 1.5px solid var(--ink); border-radius: 999px; cursor: pointer;
+  transition: transform .12s ease, opacity .12s ease, background .12s ease, color .12s ease;
 }
-.btn:hover { opacity: .88; text-decoration: none; transform: translateY(-1px); }
+.btn:hover { opacity: .9; text-decoration: none; transform: translateY(-1px); }
 .btn.ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--ink); }
-.btn.ghost:hover { background: var(--ink); color: #fff; }
+.btn.ghost:hover { background: var(--ink); color: #fff; opacity: 1; }
 .btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
-.btn-sm { padding: .5rem .85rem; font-size: .85rem; border-radius: 10px; }
+.btn-sm { padding: .46rem 1.05rem; font-size: .85rem; }
+
+/* Inline/secondary action pill (in tables, cards): light outline, inverts on
+   hover. This is the Merge "Upload file" look — far cleaner in a table than a
+   solid-black block, and still fully monochrome. */
+.btn.act {
+  background: var(--paper); color: var(--ink); border: 1.5px solid var(--rule);
+  font-weight: 600; font-size: .76rem; padding: .3rem .9rem;
+}
+.btn.act:hover { background: var(--ink); color: #fff; border-color: var(--ink); opacity: 1; transform: none; }
 
 /* --- cards ------------------------------------------------------------- */
 .card {

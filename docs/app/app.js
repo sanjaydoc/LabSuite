@@ -1172,7 +1172,7 @@ async function renderCompliance() {
       const s = records[u][t];
       const act = s === "current" ? "expire" : "complete";
       const label = s === "current" ? "lapse" : "grant";
-      return `<td>${chip(s)} <button class="btn btn-sm" data-u="${esc(u)}" data-t="${esc(t)}" data-act="${act}" style="padding:.15rem .5rem;font-size:.72rem;margin-left:.3rem">${label}</button></td>`;
+      return `<td>${chip(s)} <button class="btn act" data-u="${esc(u)}" data-t="${esc(t)}" data-act="${act}" style="margin-left:.4rem">${label}</button></td>`;
     }).join("");
     return `<tr><td><b>${esc(u)}</b></td>${cells}</tr>`;
   }).join("");
@@ -1206,7 +1206,7 @@ async function renderSaas() {
   const rows = apps.map((a) => {
     const monthly = a.monthly_cost_per_seat * a.assignees.length;
     const chips = a.assignees.map((u) =>
-      `<span class="tag">${esc(u)} <button class="seat-x" data-app="${esc(a.name)}" data-user="${esc(u)}" title="revoke seat" style="border:0;background:none;cursor:pointer;color:var(--no);font-weight:700">×</button></span>`).join(" ");
+      `<span class="tag">${esc(u)} <button class="seat-x" data-app="${esc(a.name)}" data-user="${esc(u)}" title="revoke seat" style="border:0;background:none;cursor:pointer;color:var(--muted);font-weight:700">×</button></span>`).join(" ");
     return `<tr><td><b>${esc(a.name)}</b></td><td>${a.assignees.length}</td>
       <td>$${a.monthly_cost_per_seat.toFixed(1)}</td><td>$${monthly.toFixed(0)}/mo</td>
       <td><div class="tags">${chips || '<span class="muted">—</span>'}</div></td></tr>`;
@@ -1263,8 +1263,9 @@ async function renderCost() {
     </div>`;
 }
 
+// Inline action button — styled entirely by the `.btn.act` outline-pill rule.
 const _actBtn = (act, attrs, label) =>
-  `<button class="btn btn-sm act" data-act="${act}" ${attrs} style="padding:.15rem .55rem;font-size:.72rem">${label}</button>`;
+  `<button class="btn act" data-act="${act}" ${attrs}>${label}</button>`;
 
 // Lab ops view: equipment, inventory, vendors, and facility safety.
 async function renderOps() {

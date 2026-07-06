@@ -19,13 +19,13 @@
 .view.active { display: block; animation: fade .18s ease; }
 @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
-.view h2 { font-size: 2rem; margin-bottom: .3rem; }
-.view .sub { color: var(--muted); margin-bottom: 1.6rem; font-size: .95rem; }
+.view h2 { font-size: 1.7rem; letter-spacing: -.01em; margin-bottom: .35rem; }
+.view .sub { color: var(--muted); margin-bottom: 1.5rem; font-size: .92rem; }
 
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 8px; }
 @media (max-width: 720px) { .stats { grid-template-columns: 1fr 1fr; } }
 .stat { border: 1px solid var(--hair); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-sm); }
-.stat .n { font-family: var(--serif); font-size: 2.2rem; line-height: 1; }
+.stat .n { font-family: var(--serif); font-size: 1.95rem; line-height: 1; }
 .stat .l { color: var(--muted); font-size: .82rem; margin-top: .35rem; }
 
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }

@@ -15,7 +15,7 @@
 ![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000)
 ![Deps](https://img.shields.io/badge/core%20deps-zero-success)
 
-[Live demo ↗](https://sanjaydoc.github.io/LabSuite/app/) · [Website ↗](https://sanjaydoc.github.io/LabSuite/) · [Architecture](#the-stack) · [Dashboard](#the-web-dashboard) · [Quickstart](#quickstart) · [How it maps to the real stack](#how-it-maps-to-the-real-stack)
+[Live demo ↗](https://sanjaydoc.github.io/LabSuite/app/) · [Website ↗](https://sanjaydoc.github.io/LabSuite/) · [Architecture](#the-stack) · [Dashboard](#the-web-dashboard) · [Quickstart](#quickstart) · [How it maps to the real stack](#how-it-maps-to-the-real-stack) · [Make it real](#from-demo-to-production--the-integration-map)
 
 </div>
 
@@ -418,6 +418,56 @@ maps to a concrete real command:
 
 **→ See [`docs/REAL_TOOLING.md`](docs/REAL_TOOLING.md)** for the full side-by-side
 command reference for every operation.
+
+## From demo to production — the integration map
+
+LabSuite is built behind adapter interfaces (`IdentityProvider`,
+`DirectoryProvider`, `StorageProvider`, `ComputeProvider`, `EndpointProvider`) so
+turning the in-memory simulator into a live app is a **swap, not a rewrite**. This
+is the full plan: for each of the 20 features, the real API it would call, the
+account you'd sign up for, and the change to LabSuite's code.
+
+| # | Feature | Real system + API | Account | LabSuite change |
+|---|---|---|---|---|
+| 1 | Overview + Action center | *(aggregates the others)* | — | None — reads live data; add caching |
+| 2 | Directory | **Okta** Users/Groups API | Okta | Live `IdentityProvider` (`OktaAdapter`) replaces in-memory `OktaDirectory` |
+| 3 | Onboard | Okta create-user + **SCIM→AD** + MDM + SaaS + LMS | Okta, AD, MDM | `onboard()` logic unchanged; wire live adapters so side-effects are real |
+| 4 | Offboard | Okta deactivate + SCIM + **MDM wipe** + SaaS reclaim | Okta, MDM | Swap adapters; `offboard()` verification stays |
+| 5 | Devices (imaging) | **Intune**(Win) · **Fleet**(Linux) · **Kandji**(Mac) + **Packer/Proxmox** | Intune, Fleet, Proxmox | Live `EndpointProvider`: `assign()`→clone VM from role template + MDM enroll; `wipe_and_return()`→destroy/wipe |
+| 6 | Onboarding readiness | *(reads Okta+AD+MDM+SaaS+LMS)* | — | `onboarding_checklist()` reads live adapters (real device + LMS status) |
+| 7 | Access explorer + MFA | **Okta** Groups + **Factors** (MFA) + TrueNAS/Proxmox ACL read | Okta | Live `DirectoryProvider`; `is_mfa_enrolled()`→Okta Factors API |
+| 8 | Access requests + approvals | **Okta IGA** / **ServiceNow** / **Jira SM** | Okta IGA (or internal) | `approve_request()` already calls IdentityProvider; add notifications + optional ticket sync |
+| 9 | Access review + CSV | **Okta IGA** / **SailPoint** | Okta IGA | `access_review()` reads live entitlements; CSV unchanged |
+| 10 | Attestation campaign | **Okta IGA** Certifications | Okta IGA | `revoke_user()`→live Okta group removal; persist campaign in DB |
+| 11 | Break-glass (JIT) admin | **Okta** / **Azure AD PIM** / **Teleport** | Okta / Entra P2 | `grant_jit()`→Okta group add w/ expiry; add a scheduler to auto-sweep |
+| 12 | Compliance (training gates) | **LMS**: Litmos / KnowBe4 API + cert store | Litmos/KnowBe4 | Add `LMSProvider`; store real completion+expiry dates; daily expiry sweep |
+| 13 | Audit log + CSV | **Okta System Log** + **SIEM** (Splunk/Loki/Elastic) | SIEM (self-host) | Replace in-memory `AuditLog` with DB-backed log + SIEM shipper |
+| 14 | SaaS & cost | Vendor APIs (**Kandji/Okta/Slack/Google/GitHub/Benchling**) or **Torii** | Each SaaS vendor | Add `SaaSProvider` per vendor; grant/revoke→real API; pull live seat counts + invoices |
+| 15 | Cost analytics & budgets | Same SaaS APIs + finance (**NetSuite/QuickBooks**) | SaaS vendors, Finance | `cost_analytics()` reads live spend; budgets in config; vendor cost from finance API |
+| 16 | Lab ops (assets/inventory/vendors/safety) | **Snipe-IT** + CMMS + contract tracker | Snipe-IT (self-host) | Add `AssetProvider`/`InventoryProvider` adapters syncing Snipe-IT |
+| 17 | Network segmentation | **NetBox** (IPAM) + **OPNsense/pfSense** + **Proxmox SDN** | NetBox, OPNsense, Proxmox | Add `NetworkProvider`: read from NetBox; `can_reach`→OPNsense rules; `move_device`→re-VLAN via API |
+| 18 | Backup / DR health | **TrueNAS** API + **Proxmox Backup Server** | TrueNAS, PBS | Add `BackupProvider`: pull real last-backup timestamps; `run_backup()`→trigger task |
+| 19 | Architecture | *(static diagram)* | — | None |
+| 20 | Sign-in demo | **Okta OIDC** login | Okta | Replace demo HMAC token with a real Okta OIDC redirect/callback flow |
+
+### Cross-cutting changes (simulator → deployable service)
+
+| Change | What it means |
+|---|---|
+| **Config + secrets** | A git-ignored `.env` per adapter (Okta domain/token, TrueNAS URL/key…) + a settings loader |
+| **Real persistence** | Replace `ControlPlane.to_dict/from_dict` (in-memory) with a database (SQLite→Postgres via SQLAlchemy) |
+| **Scheduler / jobs** | JIT expiry sweep, compliance expiry sweep, backup-staleness refresh, SaaS/NetBox sync (APScheduler/cron) |
+| **Notifications** | Email/Slack on requests, approvals, expiries, break-glass, stale backups |
+| **App auth + role-scoped views** | Log into the admin app itself; "My requests" vs "Approvals inbox" (separation of duties) |
+| **`labsuite doctor`** | Connectivity check for every configured adapter before running anything |
+| **Deploy** | Docker-compose the app; a one-page guide to spin the whole lab up in VirtualBox |
+
+### Accounts to sign up
+
+- **Free / self-host:** Okta Developer · VirtualBox · TrueNAS SCALE · Proxmox VE · OPNsense/pfSense · NetBox · Fleet · Snipe-IT · Grafana Loki/Elastic · Packer + Ansible + Terraform
+- **Paid / trial / your-org:** Kandji *(needs a Mac)* · Slack/Google Workspace/GitHub/Benchling · Litmos/KnowBe4 (LMS) · Okta Identity Governance · Azure AD PIM
+
+> **Lean Phase-1 start (16 GB laptop):** just **VirtualBox + Okta Developer + one TrueNAS VM + Ansible** → makes features **2, 3, 4, 7, 18, 20** real. Everything else layers on later, one feature at a time. *macOS stays record-only unless you have a real Mac (Apple licensing).*
 
 ## How it fits the "first IT hire" brief
 

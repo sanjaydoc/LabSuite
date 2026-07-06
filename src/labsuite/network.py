@@ -43,6 +43,7 @@ class Segment:
     internet: bool = True  # may reach the internet (egress)
 
     def to_dict(self) -> dict:
+        """Serialise this segment to a plain dict."""
         return {
             "name": self.name,
             "vlan_id": self.vlan_id,
@@ -54,6 +55,7 @@ class Segment:
 
     @classmethod
     def from_dict(cls, data: dict) -> Segment:
+        """Rebuild a segment from a serialised dict."""
         return cls(
             name=data["name"],
             vlan_id=data["vlan_id"],
@@ -76,6 +78,7 @@ class NetworkDevice:
     ip: str = ""
 
     def to_dict(self) -> dict:
+        """Serialise this device to a plain dict."""
         return {
             "name": self.name,
             "mac": self.mac,
@@ -87,6 +90,7 @@ class NetworkDevice:
 
     @classmethod
     def from_dict(cls, data: dict) -> NetworkDevice:
+        """Rebuild a device from a serialised dict."""
         return cls(
             name=data["name"],
             mac=data["mac"],
@@ -113,6 +117,7 @@ class Network:
     def add_segment(
         self, name: str, vlan_id: int, cidr: str, purpose: str = "", *, trust: str = "medium", internet: bool = True
     ) -> Segment:
+        """Register a VLAN segment and return it."""
         seg = Segment(name, vlan_id, cidr, purpose, trust, internet)
         self.segments[name] = seg
         return seg
@@ -124,11 +129,13 @@ class Network:
     def add_device(
         self, name: str, mac: str, kind: str, segment: str, *, owner: str | None = None, ip: str = ""
     ) -> NetworkDevice:
+        """Place a device on a segment and return it."""
         dev = NetworkDevice(name, mac, kind, segment, owner, ip)
         self.devices.append(dev)
         return dev
 
     def get_device(self, name: str) -> NetworkDevice | None:
+        """Look up a device by name (None if absent)."""
         return next((d for d in self.devices if d.name == name), None)
 
     def move_device(self, name: str, segment: str) -> NetworkDevice | None:
@@ -143,9 +150,11 @@ class Network:
     # Queries
     # ------------------------------------------------------------------ #
     def list_segments(self) -> list[Segment]:
+        """All segments, ordered by VLAN id."""
         return sorted(self.segments.values(), key=lambda s: s.vlan_id)
 
     def list_devices(self) -> list[NetworkDevice]:
+        """All devices, ordered by segment then name."""
         return sorted(self.devices, key=lambda d: (d.segment, d.name))
 
     def can_reach(self, src: str, dst: str) -> tuple[bool, str]:
@@ -159,6 +168,7 @@ class Network:
         return False, f"default-deny: no rule permits {src} → {dst}"
 
     def device_can_reach(self, device_name: str, dst: str) -> tuple[bool, str]:
+        """Would the firewall permit a named device to reach segment ``dst``?"""
         dev = self.get_device(device_name)
         if dev is None:
             return False, f"unknown device {device_name!r}"
@@ -187,6 +197,7 @@ class Network:
         return out
 
     def summary(self) -> dict:
+        """Segments, devices, policy, and flags rolled up for the GUI/API."""
         return {
             "segments": [s.to_dict() for s in self.list_segments()],
             "devices": [d.to_dict() for d in self.list_devices()],
@@ -199,6 +210,7 @@ class Network:
     # Serialisation
     # ------------------------------------------------------------------ #
     def to_dict(self) -> dict:
+        """Serialise the whole network (segments, devices, policy) to a dict."""
         return {
             "segments": [s.to_dict() for s in self.segments.values()],
             "devices": [d.to_dict() for d in self.devices],
@@ -207,6 +219,7 @@ class Network:
 
     @classmethod
     def from_dict(cls, data: dict) -> Network:
+        """Rebuild a network from a serialised dict."""
         net = cls()
         for s in data.get("segments", []):
             seg = Segment.from_dict(s)

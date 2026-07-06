@@ -51,6 +51,13 @@ class OnboardRequest(BaseModel):
 
 def create_app(cp: ControlPlane | None = None) -> FastAPI:
     """Build a FastAPI app bound to ``cp`` (defaults to the seeded lab)."""
+    # HOW TO ADD AN ENDPOINT
+    # 1. Define a function inside `create_app` decorated with `@app.get(...)` or
+    #    `@app.post(...)` (Body/Query params map to the request payload).
+    # 2. Delegate the real work to a `control.*` method -- keep handlers thin.
+    # 3. Translate domain errors: raise `HTTPException(404, ...)` on a missing
+    #    resource (KeyError) and `HTTPException(400, ...)` on bad input.
+    # 4. Drop it under the matching `# ---- ... ----` group banner below.
     control = cp or build_lab()
     app = FastAPI(
         title="LabSuite",
@@ -155,10 +162,12 @@ def create_app(cp: ControlPlane | None = None) -> FastAPI:
     def review() -> dict:
         return control.access_review()
 
+    # ---- action center (aggregated alerts) ------------------------ #
     @app.get("/alerts")
     def alerts() -> dict:
         return control.action_center()
 
+    # ---- CSV export (access / saas / audit) ----------------------- #
     @app.get("/export/{kind}")
     def export_csv(kind: str) -> PlainTextResponse:
         try:
@@ -219,6 +228,7 @@ def create_app(cp: ControlPlane | None = None) -> FastAPI:
         control.expire_training(username, training)
         return {"username": username, "training": training, "status": "expired"}
 
+    # ---- onboarding readiness ------------------------------------- #
     @app.get("/readiness")
     def readiness() -> dict:
         return control.readiness_summary()
@@ -230,6 +240,7 @@ def create_app(cp: ControlPlane | None = None) -> FastAPI:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    # ---- MFA enrollment (Okta Verify) ----------------------------- #
     @app.post("/mfa/enroll")
     def enroll_mfa(username: str = Body(..., embed=True)) -> dict:
         try:
@@ -303,6 +314,7 @@ def create_app(cp: ControlPlane | None = None) -> FastAPI:
     def ops() -> dict:
         return control.ops_summary()
 
+    # ---- cost analytics (SaaS vs budget + vendor spend) ----------- #
     @app.get("/cost")
     def cost() -> dict:
         return control.cost_analytics()

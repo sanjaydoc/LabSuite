@@ -14,6 +14,8 @@ from dataclasses import dataclass
 
 @dataclass
 class AccessRequest:
+    """One self-service request for group membership, and its approval state."""
+
     id: str
     requester: str
     group: str
@@ -23,6 +25,7 @@ class AccessRequest:
     note: str = ""
 
     def to_dict(self) -> dict:
+        """Serialise this request to a plain dict."""
         return {
             "id": self.id,
             "requester": self.requester,
@@ -35,6 +38,7 @@ class AccessRequest:
 
     @classmethod
     def from_dict(cls, data: dict) -> AccessRequest:
+        """Rebuild a request from a serialised dict."""
         return cls(
             id=data["id"],
             requester=data["requester"],
@@ -54,6 +58,7 @@ class RequestQueue:
         self._counter = 0
 
     def create(self, requester: str, group: str, justification: str = "") -> AccessRequest:
+        """Enqueue a new pending request and return it (assigns the next REQ id)."""
         self._counter += 1
         rid = f"REQ-{self._counter:04d}"
         req = AccessRequest(rid, requester, group, justification)
@@ -61,22 +66,27 @@ class RequestQueue:
         return req
 
     def get(self, rid: str) -> AccessRequest | None:
+        """Look up a request by id (None if absent)."""
         return self.requests.get(rid)
 
     def pending(self) -> list[AccessRequest]:
+        """Every request still awaiting a decision."""
         return [r for r in self.requests.values() if r.status == "pending"]
 
     def all(self) -> list[AccessRequest]:
+        """Every request, ordered by id."""
         return sorted(self.requests.values(), key=lambda r: r.id)
 
     # ------------------------------------------------------------------ #
     # Serialisation
     # ------------------------------------------------------------------ #
     def to_dict(self) -> dict:
+        """Serialise the queue (all requests + id counter) to a dict."""
         return {"counter": self._counter, "requests": [r.to_dict() for r in self.requests.values()]}
 
     @classmethod
     def from_dict(cls, data: dict) -> RequestQueue:
+        """Rebuild the queue from a serialised dict."""
         q = cls()
         q._counter = data.get("counter", 0)
         q.requests = {r["id"]: AccessRequest.from_dict(r) for r in data.get("requests", [])}

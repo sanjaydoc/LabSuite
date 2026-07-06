@@ -34,16 +34,20 @@ class BackupRecord:
 
     @property
     def threshold(self) -> int:
+        """Max age (hours) allowed for this record's schedule before it is stale."""
         return STALE_THRESHOLD_HOURS.get(self.schedule, 36)
 
     def is_stale(self) -> bool:
+        """True if the last backup is older than the schedule permits."""
         return self.last_backup_hours > self.threshold
 
     @property
     def status(self) -> str:
+        """``stale`` or ``ok`` for this record."""
         return "stale" if self.is_stale() else "ok"
 
     def to_dict(self) -> dict:
+        """Serialise this record to a plain dict (includes derived status)."""
         return {
             "resource": self.resource,
             "kind": self.kind,
@@ -56,6 +60,7 @@ class BackupRecord:
 
     @classmethod
     def from_dict(cls, data: dict) -> BackupRecord:
+        """Rebuild a record from a serialised dict."""
         return cls(
             resource=data["resource"],
             kind=data["kind"],
@@ -74,11 +79,13 @@ class BackupRegistry:
 
     def add(self, resource: str, kind: str, schedule: str, last_backup_hours: int,
             *, retention_days: int = 30, target: str = "replication") -> BackupRecord:
+        """Register a protected resource (dataset/VM) and return its record."""
         rec = BackupRecord(resource, kind, schedule, last_backup_hours, retention_days, target)
         self.records.append(rec)
         return rec
 
     def get(self, resource: str) -> BackupRecord | None:
+        """Look up a record by resource name (None if absent)."""
         return next((r for r in self.records if r.resource == resource), None)
 
     def run_backup(self, resource: str) -> BackupRecord | None:
@@ -89,12 +96,15 @@ class BackupRegistry:
         return rec
 
     def stale(self) -> list[BackupRecord]:
+        """Every record whose last backup is overdue for its schedule."""
         return [r for r in self.records if r.is_stale()]
 
     def flags(self) -> list[str]:
+        """Human-readable stale-backup alerts for the action center."""
         return [f"{r.resource} ({r.kind}): backup {r.last_backup_hours}h old — {r.schedule} schedule" for r in self.stale()]
 
     def health(self) -> dict:
+        """Roll up all records, stale count, and a protected-percentage for the GUI/API."""
         records = sorted(self.records, key=lambda r: (r.kind, r.resource))
         stale = self.stale()
         return {
@@ -106,10 +116,12 @@ class BackupRegistry:
         }
 
     def to_dict(self) -> dict:
+        """Serialise the registry (all records) to a dict."""
         return {"records": [r.to_dict() for r in self.records]}
 
     @classmethod
     def from_dict(cls, data: dict) -> BackupRegistry:
+        """Rebuild the registry from a serialised dict."""
         reg = cls()
         reg.records = [BackupRecord.from_dict(r) for r in data.get("records", [])]
         return reg

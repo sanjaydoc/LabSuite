@@ -137,6 +137,20 @@ class AccessReport:
         }
 
 
+# --------------------------------------------------------------------------- #
+# HOW TO ADD A FEATURE MODULE
+#
+# Every feature here follows the same pattern -- copy it end to end:
+#   (a) Write a small self-contained registry/dataclass module (e.g. network.py,
+#       jit.py, backup.py) that owns the state and its to_dict/from_dict.
+#   (b) Instantiate it in ControlPlane.__init__ (e.g. `self.network = Network()`).
+#   (c) Add thin control-plane methods that call it AND write an audit trail via
+#       `self.audit.record(...)` -- the module stays pure; wiring lives here.
+#   (d) Add it to to_dict() and from_dict() so its state persists between runs.
+#   (e) If it produces flags, surface them in action_center() so they reach the inbox.
+#   (f) Expose it through cli.py, api.py, and -- for the browser demo --
+#       scripts/export_snapshot.py + docs/app/app.js.
+# --------------------------------------------------------------------------- #
 class ControlPlane:
     """Operates Okta -> Active Directory -> TrueNAS + Proxmox as one system."""
 
@@ -309,6 +323,7 @@ class ControlPlane:
     # Authentication
     # ------------------------------------------------------------------ #
     def login(self, username: str, password: str, *, now: float | None = None) -> str:
+        """Authenticate against Okta and return a session token (audited allow/deny)."""
         try:
             token = self.okta.authenticate(username, password, now=now)
         except PermissionError:
@@ -468,6 +483,7 @@ class ControlPlane:
         return {"entitlements": entitlements, "flags": flags}
 
     def sync(self, *, actor: str = "it-admin") -> SyncReport:
+        """Run the SCIM Okta -> AD reconcile on demand."""
         return self.scim.reconcile(actor=actor)
 
     # ------------------------------------------------------------------ #
@@ -752,6 +768,7 @@ class ControlPlane:
         return req
 
     def deny_request(self, request_id: str, *, approver: str = "it-admin", note: str = "") -> AccessRequest:
+        """Deny a pending access request (records the reviewer's note)."""
         req = self.requests.get(request_id)
         if req is None:
             raise KeyError(f"no such request: {request_id!r}")
@@ -820,34 +837,40 @@ class ControlPlane:
         }
 
     def complete_maintenance(self, asset_tag: str, *, actor: str = "lab-ops"):
+        """Log equipment maintenance as done and reset its cadence (audited)."""
         e = self.ops.complete_maintenance(asset_tag)
         if e is not None:
             self.audit.record(actor, "equipment.maintenance", asset_tag, "operations", detail="serviced")
         return e
 
     def reorder_inventory(self, sku: str, *, actor: str = "lab-ops"):
+        """Restock a low inventory item and audit the new quantity."""
         i = self.ops.reorder(sku)
         if i is not None:
             self.audit.record(actor, "inventory.reorder", sku, "operations", detail=f"qty -> {i.qty}")
         return i
 
     def resolve_safety(self, area: str, check: str, *, actor: str = "facilities"):
+        """Close out an open safety checklist item (audited)."""
         s = self.ops.resolve_safety(area, check)
         if s is not None:
             self.audit.record(actor, "safety.resolve", f"{area}:{check}", "operations")
         return s
 
     def renew_vendor(self, name: str, *, actor: str = "it-admin"):
+        """Renew a vendor contract and reset its renewal countdown (audited)."""
         v = self.ops.renew_vendor(name)
         if v is not None:
             self.audit.record(actor, "vendor.renew", name, "operations")
         return v
 
     def grant_saas_seat(self, username: str, app: str, *, actor: str = "it-admin") -> None:
+        """Grant a user a SaaS licence seat (audited)."""
         self.ops.grant_saas(username, app)
         self.audit.record(actor, "saas.grant", username, "saas", detail=app)
 
     def revoke_saas_seat(self, username: str, app: str, *, actor: str = "it-admin") -> bool:
+        """Reclaim a user's SaaS licence seat (audited); returns whether one was held."""
         ok = self.ops.revoke_saas_seat(username, app)
         if ok:
             self.audit.record(actor, "saas.revoke", username, "saas", detail=app)
@@ -857,6 +880,7 @@ class ControlPlane:
     # Backup / DR health
     # ------------------------------------------------------------------ #
     def backup_health(self) -> dict:
+        """Backup/DR health across every dataset and VM, with stale-backup flags."""
         return self.backups.health()
 
     def run_backup(self, resource: str, *, actor: str = "it-admin"):
@@ -870,6 +894,7 @@ class ControlPlane:
     # Networking (VLAN segmentation + IoT)
     # ------------------------------------------------------------------ #
     def network_summary(self) -> dict:
+        """VLAN segments, device placement, firewall policy, and segmentation flags."""
         return self.network.summary()
 
     def check_segmentation(self, src: str, dst: str, *, actor: str = "it-admin") -> dict:
@@ -892,6 +917,7 @@ class ControlPlane:
     # Serialisation (persist state between CLI invocations)
     # ------------------------------------------------------------------ #
     def to_dict(self) -> dict:
+        """Serialise the whole platform to a plain dict (one key per layer/feature)."""
         return {
             "okta": self.okta.to_dict(),
             "ad": self.ad.to_dict(),
@@ -910,6 +936,7 @@ class ControlPlane:
 
     @classmethod
     def from_dict(cls, data: dict) -> ControlPlane:
+        """Rebuild a control plane from a dict produced by ``to_dict``."""
         audit = AuditLog()
         audit.load(data.get("audit", []))
         cp = cls(

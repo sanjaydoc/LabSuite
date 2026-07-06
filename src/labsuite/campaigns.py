@@ -26,19 +26,23 @@ class ReviewCampaign:
     open: bool = True
 
     def start(self, usernames: list[str]) -> None:
+        """Open the campaign over ``usernames``, resetting every decision to pending."""
         self.subjects = list(usernames)
         self.decisions = {u: {"status": "pending", "reviewer": "", "note": ""} for u in usernames}
         self.open = True
 
     def decide(self, username: str, status: str, reviewer: str, note: str = "") -> None:
+        """Record a reviewer's decision (certified/revoked) for one subject."""
         if username not in self.decisions:
             raise KeyError(f"{username!r} is not in campaign {self.name!r}")
         self.decisions[username] = {"status": status, "reviewer": reviewer, "note": note}
 
     def status_of(self, username: str) -> str:
+        """This subject's decision status (defaults to ``pending``)."""
         return self.decisions.get(username, {}).get("status", "pending")
 
     def progress(self) -> dict:
+        """Counts of certified/revoked/pending plus a completion percentage."""
         total = len(self.subjects)
         certified = sum(1 for d in self.decisions.values() if d["status"] == "certified")
         revoked = sum(1 for d in self.decisions.values() if d["status"] == "revoked")
@@ -56,10 +60,12 @@ class ReviewCampaign:
         }
 
     def to_dict(self) -> dict:
+        """Serialise the campaign (name, subjects, decisions, open) to a dict."""
         return {"name": self.name, "subjects": list(self.subjects), "decisions": self.decisions, "open": self.open}
 
     @classmethod
     def from_dict(cls, data: dict) -> ReviewCampaign:
+        """Rebuild a campaign from a serialised dict."""
         c = cls(name=data.get("name", ""))
         c.subjects = list(data.get("subjects", []))
         c.decisions = {u: dict(d) for u, d in data.get("decisions", {}).items()}

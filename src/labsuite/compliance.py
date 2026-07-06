@@ -30,6 +30,7 @@ class ComplianceRegistry:
             rec.setdefault(training, MISSING)
 
     def complete(self, username: str, training: str) -> None:
+        """Mark a training current -- unlocks any access it was gating."""
         self.records.setdefault(username, {})[training] = CURRENT
 
     def expire(self, username: str, training: str) -> None:
@@ -37,16 +38,20 @@ class ComplianceRegistry:
         self.records.setdefault(username, {})[training] = EXPIRED
 
     def status(self, username: str, training: str) -> str:
+        """This user's status for a training (``missing`` if unrecorded)."""
         return self.records.get(username, {}).get(training, MISSING)
 
     def has_current(self, username: str, training: str) -> bool:
+        """True if the user holds a current (non-lapsed) record for the training."""
         return self.status(username, training) == CURRENT
 
     def trainings_for(self, username: str) -> dict[str, str]:
+        """A copy of the user's {training: status} map."""
         return dict(self.records.get(username, {}))
 
     @staticmethod
     def is_gated(share: str) -> bool:
+        """True if the share requires training on top of its group ACL."""
         return share in GATED_SHARES
 
     def missing_for_share(self, username: str, share: str) -> list[str]:
@@ -54,16 +59,19 @@ class ComplianceRegistry:
         return [t for t in GATED_SHARES.get(share, []) if not self.has_current(username, t)]
 
     def all_records(self) -> dict[str, dict[str, str]]:
+        """A deep copy of every user's training records."""
         return {u: dict(v) for u, v in self.records.items()}
 
     # ------------------------------------------------------------------ #
     # Serialisation
     # ------------------------------------------------------------------ #
     def to_dict(self) -> dict:
+        """Serialise all training records to a dict."""
         return {"records": self.all_records()}
 
     @classmethod
     def from_dict(cls, data: dict) -> ComplianceRegistry:
+        """Rebuild the registry from a serialised dict."""
         reg = cls()
         reg.records = {u: dict(v) for u, v in data.get("records", {}).items()}
         return reg

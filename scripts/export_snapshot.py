@@ -74,6 +74,9 @@ def main() -> None:
     }
     devices = [d.to_dict() for d in cp.endpoints.list_devices()]
 
+    # Every key below becomes window.LABSUITE_DATA.<key>, consumed by the browser
+    # DemoEngine (docs/app/). When you add a feature the demo must show, add its
+    # seed/config here too, or it won't exist client-side.
     data = {
         "demo_password": DEMO_PASSWORD,
         "departments": [d.value for d in Department],

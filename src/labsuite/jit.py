@@ -40,15 +40,19 @@ class JitGrant:
 
     @property
     def expires_at(self) -> float:
+        """Epoch second at which this grant lapses (granted_at + ttl)."""
         return self.granted_at + self.ttl_minutes * 60
 
     def is_active(self, now: float) -> bool:
+        """True if the grant is neither revoked nor past its expiry at ``now``."""
         return not self.revoked and now < self.expires_at
 
     def remaining_minutes(self, now: float) -> int:
+        """Whole minutes left before expiry at ``now`` (0 once lapsed)."""
         return max(0, int((self.expires_at - now) // 60))
 
     def to_dict(self) -> dict:
+        """Serialise this grant to a plain dict."""
         return {
             "id": self.id,
             "username": self.username,
@@ -63,6 +67,7 @@ class JitGrant:
 
     @classmethod
     def from_dict(cls, data: dict) -> JitGrant:
+        """Rebuild a grant from a serialised dict."""
         return cls(
             id=data["id"],
             username=data["username"],
@@ -83,6 +88,7 @@ class JitLedger:
         self._counter = 0
 
     def create(self, username: str, group: str, ttl_minutes: int, reason: str, granted_by: str, *, now: float) -> JitGrant:
+        """Record a new time-bound grant and return it (assigns the next JIT id)."""
         self._counter += 1
         grant = JitGrant(
             id=f"JIT-{self._counter:04d}",
@@ -97,9 +103,11 @@ class JitLedger:
         return grant
 
     def get(self, grant_id: str) -> JitGrant | None:
+        """Look up a grant by id (None if absent)."""
         return next((g for g in self.grants if g.id == grant_id), None)
 
     def active(self, now: float) -> list[JitGrant]:
+        """Grants still live (not revoked, not expired) at ``now``."""
         return [g for g in self.grants if g.is_active(now)]
 
     def expired_unswept(self, now: float) -> list[JitGrant]:
@@ -107,10 +115,12 @@ class JitLedger:
         return [g for g in self.grants if not g.revoked and now >= g.expires_at]
 
     def to_dict(self) -> dict:
+        """Serialise the ledger (grants + id counter) to a dict."""
         return {"grants": [g.to_dict() for g in self.grants], "counter": self._counter}
 
     @classmethod
     def from_dict(cls, data: dict) -> JitLedger:
+        """Rebuild the ledger from a serialised dict."""
         ledger = cls()
         ledger.grants = [JitGrant.from_dict(g) for g in data.get("grants", [])]
         ledger._counter = data.get("counter", len(ledger.grants))

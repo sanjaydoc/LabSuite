@@ -72,11 +72,14 @@ def saas_apps_for_role(role: str) -> list[str]:
 
 @dataclass
 class SaasApp:
+    """A SaaS application: its per-seat cost and the users holding a seat."""
+
     name: str
     monthly_cost_per_seat: float
     assignees: set[str] = field(default_factory=set)
 
     def to_dict(self) -> dict:
+        """Serialise the app (name, cost, sorted assignees) to a dict."""
         return {
             "name": self.name,
             "monthly_cost_per_seat": self.monthly_cost_per_seat,
@@ -86,6 +89,8 @@ class SaasApp:
 
 @dataclass
 class Equipment:
+    """A lab instrument with a maintenance/calibration countdown."""
+
     asset_tag: str
     name: str
     location: str
@@ -93,6 +98,7 @@ class Equipment:
     maintenance_in_days: int  # days until next maintenance (negative = overdue)
 
     def to_dict(self) -> dict:
+        """Serialise this equipment record to a dict."""
         return {
             "asset_tag": self.asset_tag,
             "name": self.name,
@@ -104,6 +110,8 @@ class Equipment:
 
 @dataclass
 class InventoryItem:
+    """A reagent/consumable with an on-hand quantity and a reorder point."""
+
     sku: str
     name: str
     location: str
@@ -113,9 +121,11 @@ class InventoryItem:
 
     @property
     def low(self) -> bool:
+        """True when on-hand quantity has fallen to/below the reorder point."""
         return self.qty <= self.reorder_point
 
     def to_dict(self) -> dict:
+        """Serialise this inventory item (with derived ``low``) to a dict."""
         return {
             "sku": self.sku,
             "name": self.name,
@@ -129,12 +139,15 @@ class InventoryItem:
 
 @dataclass
 class Vendor:
+    """A vendor contract with a renewal countdown and annual cost."""
+
     name: str
     category: str
     renewal_in_days: int
     annual_cost: float
 
     def to_dict(self) -> dict:
+        """Serialise this vendor record to a dict."""
         return {
             "name": self.name,
             "category": self.category,
@@ -145,12 +158,15 @@ class Vendor:
 
 @dataclass
 class SafetyCheck:
+    """One facility safety checklist item and its pass/open status."""
+
     area: str
     check: str
     status: str  # "pass" | "open"
     note: str = ""
 
     def to_dict(self) -> dict:
+        """Serialise this safety check to a dict."""
         return {"area": self.area, "check": self.check, "status": self.status, "note": self.note}
 
 
@@ -166,6 +182,7 @@ class Operations:
 
     # ---- SaaS ------------------------------------------------------- #
     def ensure_app(self, name: str) -> SaasApp:
+        """Get the app record, creating it (priced from the catalog) if new."""
         app = self.saas.get(name)
         if app is None:
             app = SaasApp(name=name, monthly_cost_per_seat=SAAS_CATALOG.get(name, 0.0))
@@ -173,21 +190,25 @@ class Operations:
         return app
 
     def grant_saas(self, username: str, app: str) -> None:
+        """Give a user a seat in an app."""
         self.ensure_app(app).assignees.add(username)
 
     def provision_role_apps(self, username: str, role: str) -> list[str]:
+        """Grant the baseline + role SaaS seats for a hire; returns the app list."""
         apps = saas_apps_for_role(role)
         for app in apps:
             self.grant_saas(username, app)
         return apps
 
     def revoke_saas_all(self, username: str) -> list[str]:
+        """Reclaim every seat a user holds (offboarding); returns the apps freed."""
         removed = [name for name, app in self.saas.items() if username in app.assignees]
         for app in self.saas.values():
             app.assignees.discard(username)
         return sorted(removed)
 
     def revoke_saas_seat(self, username: str, app: str) -> bool:
+        """Reclaim a single seat; returns whether the user actually held one."""
         entry = self.saas.get(app)
         if entry and username in entry.assignees:
             entry.assignees.discard(username)
@@ -195,9 +216,11 @@ class Operations:
         return False
 
     def apps_for(self, username: str) -> list[str]:
+        """The apps a user currently has a seat in."""
         return sorted(name for name, app in self.saas.items() if username in app.assignees)
 
     def monthly_spend(self) -> float:
+        """Total monthly SaaS spend across all seats."""
         return round(sum(app.monthly_cost_per_seat * len(app.assignees) for app in self.saas.values()), 2)
 
     def orphaned_seats(self, is_active) -> list[tuple[str, str]]:
@@ -211,21 +234,27 @@ class Operations:
 
     # ---- Flags ------------------------------------------------------ #
     def overdue_equipment(self) -> list[Equipment]:
+        """Equipment past its maintenance date."""
         return [e for e in self.equipment if e.maintenance_in_days < 0]
 
     def due_equipment(self, within: int = 14) -> list[Equipment]:
+        """Equipment due for maintenance within ``within`` days."""
         return [e for e in self.equipment if 0 <= e.maintenance_in_days <= within]
 
     def low_stock(self) -> list[InventoryItem]:
+        """Inventory items at or below their reorder point."""
         return [i for i in self.inventory if i.low]
 
     def upcoming_renewals(self, within: int = 60) -> list[Vendor]:
+        """Vendor contracts renewing within ``within`` days."""
         return [v for v in self.vendors if v.renewal_in_days <= within]
 
     def open_safety(self) -> list[SafetyCheck]:
+        """Safety checklist items still open."""
         return [s for s in self.safety if s.status == "open"]
 
     def annual_saas_cost(self) -> float:
+        """Annualised SaaS spend (monthly x 12)."""
         return round(self.monthly_spend() * 12, 2)
 
     # ---- Mutations (used by the fully-operable GUI/API) ------------- #
@@ -246,6 +275,7 @@ class Operations:
         return None
 
     def resolve_safety(self, area: str, check: str) -> SafetyCheck | None:
+        """Mark an open safety item as passed (clears its note)."""
         for s in self.safety:
             if s.area == area and s.check == check:
                 s.status = "pass"
@@ -254,6 +284,7 @@ class Operations:
         return None
 
     def renew_vendor(self, name: str, cadence_days: int = 365) -> Vendor | None:
+        """Renew a vendor contract, resetting its renewal countdown."""
         for v in self.vendors:
             if v.name == name:
                 v.renewal_in_days = cadence_days
@@ -261,6 +292,7 @@ class Operations:
         return None
 
     def summary(self, is_active) -> dict:
+        """SaaS spend + equipment/inventory/vendor/safety flags for the GUI/API."""
         return {
             "saas_apps": len(self.saas),
             "monthly_saas_spend": self.monthly_spend(),
@@ -275,6 +307,7 @@ class Operations:
 
     # ---- Serialisation --------------------------------------------- #
     def to_dict(self) -> dict:
+        """Serialise every ops registry (saas/equipment/inventory/vendors/safety)."""
         return {
             "saas": [a.to_dict() for a in self.saas.values()],
             "equipment": [e.to_dict() for e in self.equipment],
@@ -285,6 +318,7 @@ class Operations:
 
     @classmethod
     def from_dict(cls, data: dict) -> Operations:
+        """Rebuild the ops registries from a serialised dict."""
         ops = cls()
         for a in data.get("saas", []):
             ops.saas[a["name"]] = SaasApp(a["name"], a["monthly_cost_per_seat"], set(a.get("assignees", [])))

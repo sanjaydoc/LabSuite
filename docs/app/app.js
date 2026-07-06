@@ -428,6 +428,7 @@ class DemoEngine {
     return r;
   }
 
+  // ---- per-seat SaaS mutations -------------------------------------
   grantSaasSeat(username, app) {
     (this.saas[app] ||= { name: app, cost: (this.d.saas_catalog || {})[app] || 0, assignees: new Set() }).assignees.add(username);
     this.log("saas", "saas.grant", username, "success", app);
@@ -438,6 +439,7 @@ class DemoEngine {
     return !!ok;
   }
 
+  // ---- managed device lifecycle ------------------------------------
   assignDevice(username, role) {
     const imageName = this.d.role_image[role] || "mac-standard";
     const img = this.d.image_catalog[imageName];
@@ -462,6 +464,7 @@ class DemoEngine {
     this.audit.push({ system, action, target, outcome, detail });
   }
 
+  // ---- access resolution: group nesting + TrueNAS/Proxmox ACL levels
   effectiveGroups(user) {
     if (!user || !user.active) return new Set();
     const eff = new Set(user.okta_groups);
@@ -536,6 +539,7 @@ class DemoEngine {
     return u;
   }
 
+  // ---- onboarding / offboarding orchestration ----------------------
   onboard(name, dept, role) {
     const username = this.uniqueUsername(name);
     const email = `${username}@lab.local`;
@@ -570,6 +574,7 @@ class DemoEngine {
     return { username, removed_groups: removed, clean, residual_truenas: a.truenas, residual_proxmox: a.proxmox, device, saas_revoked: saasRevoked };
   }
 
+  // ---- single access-decision checks (allow / deny) ----------------
   checkTruenas(username, share, action) {
     const required = { read: 1, modify: 2, full: 3 }[action];
     const groups = this.effectiveGroups(this.users[username]);
@@ -596,6 +601,7 @@ class DemoEngine {
       reason: allowed ? `role ${r.name} via ${r.via.join(", ")}` : `role ${r.name} < required ${this.d.proxmox_roles[required]}` };
   }
 
+  // ---- estate review, auth & directory/stats -----------------------
   review() {
     const entitlements = {}, flags = [];
     for (const username in this.users) {
@@ -645,6 +651,7 @@ class DemoEngine {
  * ------------------------------------------------------------------ */
 const engine = new DemoEngine(D);
 
+// demoBackend: runs everything in-browser against the DemoEngine above (no server).
 const demoBackend = {
   mode: "demo",
   async stats() { return engine.stats(); },
@@ -701,6 +708,7 @@ const demoBackend = {
   async usernames() { return Object.keys(engine.users).sort(); },
 };
 
+// liveBackend: same method surface, but each call hits the FastAPI server over HTTP.
 const liveBackend = {
   mode: "live",
   async _json(url, opts) { const r = await fetch(url, opts); if (!r.ok) throw new Error(r.status); return r.json(); },
@@ -857,6 +865,7 @@ function groupTags(a) {
 /* ------------------------------------------------------------------ *
  * Views
  * ------------------------------------------------------------------ */
+// Overview / home view: top-line estate stats plus the action center.
 async function renderOverview() {
   const s = await backend.stats();
   byId("ov-stats").innerHTML = [
@@ -867,6 +876,7 @@ async function renderOverview() {
 
 const _sevDot = (sev) => `<span class="sev ${sev}" title="${sev}"></span>`;
 
+// Action center: aggregates every outstanding flag; each row links to its view.
 async function renderActionCenter() {
   const ac = await backend.alerts();
   const c = ac.counts || { high: 0, medium: 0, info: 0 };
@@ -892,6 +902,7 @@ async function renderActionCenter() {
   $$("#ov-alerts .alert-row").forEach((el) => el.onclick = () => go(el.dataset.view));
 }
 
+// Directory view: every identity with its resolved share/VM counts.
 async function renderDirectory() {
   const rows = await backend.directory();
   byId("dir-table").innerHTML =
@@ -978,6 +989,7 @@ async function doOffboard() {
   await refreshUserSelects();
 }
 
+// Devices view: the managed laptop/device fleet and imaging baselines.
 async function renderDevices() {
   const rows = (await backend.devices()).slice().sort((a, b) => a.asset_tag.localeCompare(b.asset_tag));
   const body = rows.map((d) => {
@@ -993,6 +1005,7 @@ async function renderDevices() {
     `<tr><th>Asset</th><th>Model</th><th>Image</th><th>OS</th><th>Baseline</th><th>Assignee</th><th>Status</th></tr>${body}`;
 }
 
+// Access explorer view: resolve one user's full Okta -> AD -> TrueNAS/Proxmox access.
 async function renderExplorer() {
   const u = byId("ex-user").value;
   if (!u) return;
@@ -1044,6 +1057,7 @@ async function doCheck() {
     <div class="muted" style="font-size:.85rem;margin-top:.4rem">granted <b>${esc(d.granted)}</b>, required <b>${esc(d.required)}</b> — ${esc(d.reason)}${d.via && d.via.length ? " (" + d.via.map(esc).join(", ") + ")" : ""}</div>`;
 }
 
+// Access review view: estate-wide entitlement report plus anomaly flags.
 async function renderReview() {
   const r = await backend.review();
   byId("rv-export").onclick = async () => {
@@ -1067,6 +1081,7 @@ async function renderReview() {
   await renderCampaign();
 }
 
+// Attestation campaign panel (rendered inside the review view).
 async function renderCampaign() {
   const st = await backend.campaign();
   const p = st.progress || { total: 0 };
@@ -1101,6 +1116,7 @@ async function renderCampaign() {
   });
 }
 
+// Audit log view: every control-plane action, newest first.
 async function renderAudit() {
   const events = await backend.audit();
   byId("audit-export").onclick = () => downloadCsv("labsuite-audit.csv",
@@ -1115,6 +1131,7 @@ async function renderAudit() {
     </div>`).join("") : '<div class="muted">No events yet — try onboarding or a decision, then return here.</div>';
 }
 
+// Access requests view: file, approve, or deny group-membership requests.
 async function renderRequests() {
   const [reqs, users] = await Promise.all([backend.requestsList(), backend.usernames()]);
   const groups = (D.all_groups || []).filter((g) => g !== "Everyone");
@@ -1143,6 +1160,7 @@ async function renderRequests() {
   };
 }
 
+// Compliance view: training-status grid with grant/lapse toggles.
 async function renderCompliance() {
   const records = await backend.complianceRecords();
   const trainings = ["Data-Handling", "Biosafety", "Chemical-Safety", "IACUC"];
@@ -1167,6 +1185,7 @@ async function renderCompliance() {
   });
 }
 
+// SaaS view: per-app seats, spend, and seat grant/revoke.
 async function renderSaas() {
   const data = await backend.saas();
   byId("saas-export").onclick = () => downloadCsv("labsuite-saas.csv",
@@ -1210,6 +1229,7 @@ async function renderSaas() {
   };
 }
 
+// Cost analytics view: SaaS spend vs budget by dept + vendor spend by category.
 async function renderCost() {
   const c = await backend.cost();
   const usd = (n) => "$" + Math.round(n).toLocaleString();
@@ -1246,6 +1266,7 @@ async function renderCost() {
 const _actBtn = (act, attrs, label) =>
   `<button class="btn btn-sm act" data-act="${act}" ${attrs} style="padding:.15rem .55rem;font-size:.72rem">${label}</button>`;
 
+// Lab ops view: equipment, inventory, vendors, and facility safety.
 async function renderOps() {
   const [equipment, inventory, vendors, safety] = await Promise.all(
     [backend.assets(), backend.inventory(), backend.vendors(), backend.safety()]);
@@ -1287,6 +1308,7 @@ const _trustChip = (t) => {
   return `<span class="chip ${cls}">${esc(t)}</span>`;
 };
 
+// Network view: VLAN segments, device placement, and east-west policy matrix.
 async function renderNetwork() {
   const s = await backend.network();
   const segs = s.segments || [];
@@ -1343,6 +1365,7 @@ async function renderNetwork() {
   };
 }
 
+// Backup / DR view: dataset & VM backup freshness with stale flags.
 async function renderBackup() {
   const h = await backend.backup();
   byId("bk-stats").innerHTML = [
@@ -1372,6 +1395,7 @@ function engineReach(summary, src, dst) {
   return (summary.policy || []).some((p) => p[0] === src && p[1] === dst);
 }
 
+// Break-glass (JIT) view: grant and track time-boxed admin elevations.
 async function renderJit() {
   const st = await backend.jit();
   const groups = D.elevated_groups || { "Domain-Admins": "Full admin" };
@@ -1415,6 +1439,7 @@ async function renderJit() {
   $$("#jit-body button.act").forEach((b) => b.onclick = async () => { await backend.jitRevoke(b.dataset.id); renderJit(); });
 }
 
+// Onboarding readiness view: day-one checklist completion per hire.
 async function renderReadiness() {
   const s = await backend.readiness();
   const sel = byId("rd-user");
@@ -1431,6 +1456,7 @@ async function renderReadiness() {
   byId("rd-user").onchange = renderChecklist;
 }
 
+// Per-user readiness checklist detail (rendered inside the readiness view).
 async function renderChecklist() {
   const u = byId("rd-user").value;
   if (!u) { byId("rd-checklist").innerHTML = ""; return; }
@@ -1447,6 +1473,7 @@ async function renderChecklist() {
     <div class="checklist" style="margin-top:.6rem">${rows}</div></div>`;
 }
 
+// Architecture view: static diagram of the identity -> ACL flow.
 function renderArchitecture() {
   byId("arch").innerHTML = `
     <div style="display:grid;gap:12px;max-width:560px">
@@ -1488,6 +1515,19 @@ async function refreshUserSelects() {
   }
 }
 
+// HOW TO ADD A NEW VIEW/FEATURE
+// The whole app is data-view driven; a new view "X" is wired end to end like so:
+//   (a) In index.html add a nav button and a matching section:
+//         <button class="navitem" data-view="X">…</button>
+//         <section class="view" id="view-X">…</section>
+//   (b) If the demo needs seed data, add it to scripts/export_snapshot.py (so it
+//       lands in data.js) and add a method to class DemoEngine that mirrors the
+//       Python engine's logic for it.
+//   (c) Expose that method on BOTH backends — add it to demoBackend (calls the
+//       engine) and liveBackend (calls the FastAPI endpoint) with the same name.
+//   (d) Write `async function renderX()` that reads from `backend.X()` and fills
+//       the section via byId("…").innerHTML.
+//   (e) Register it in the RENDERERS map below as `X: renderX` so go("X") runs it.
 const RENDERERS = {
   overview: renderOverview, directory: renderDirectory, explorer: renderExplorer,
   review: renderReview, audit: renderAudit, architecture: renderArchitecture,

@@ -55,16 +55,19 @@ class DeviceFleet(EndpointProvider):
         return device
 
     def device_for(self, username: str) -> Device | None:
+        """The device currently assigned to a user (None if none)."""
         asset_tag = self._by_user.get(username)
         return self.devices.get(asset_tag) if asset_tag else None
 
     def list_devices(self) -> list[Device]:
+        """Every device in the fleet."""
         return list(self.devices.values())
 
     # ------------------------------------------------------------------ #
     # Serialisation
     # ------------------------------------------------------------------ #
     def to_dict(self) -> dict:
+        """Serialise the fleet (devices + user mapping + id counter) to a dict."""
         return {
             "counter": self._counter,
             "devices": [d.to_dict() for d in self.devices.values()],
@@ -73,6 +76,7 @@ class DeviceFleet(EndpointProvider):
 
     @classmethod
     def from_dict(cls, data: dict) -> DeviceFleet:
+        """Rebuild the fleet from a serialised dict."""
         fleet = cls()
         fleet._counter = data.get("counter", 0)
         fleet.devices = {d["asset_tag"]: Device.from_dict(d) for d in data.get("devices", [])}

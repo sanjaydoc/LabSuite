@@ -36,6 +36,7 @@ SEED_PEOPLE: list[tuple[str, Department, str, str]] = [
 ]
 
 
+# Seeds the TrueNAS shares and their per-group ACLs (home, research, sensitive, ...).
 def _wire_truenas(cp: ControlPlane) -> None:
     nas = cp.truenas
     nas.add_share("home", "tank/home", "Per-user home directories")
@@ -85,6 +86,7 @@ def _wire_truenas(cp: ControlPlane) -> None:
     nas.grant("legal-contracts", "Legal-Privileged", AccessLevel.FULL)
 
 
+# Seeds the Proxmox VMs (GPU/lab/CI/infra) and the pool-level role ACLs.
 def _wire_proxmox(cp: ControlPlane) -> None:
     pve = cp.proxmox
     pve.add_vm(101, "train-a100-01", "pve-gpu-01", pool="research")
@@ -101,6 +103,7 @@ def _wire_proxmox(cp: ControlPlane) -> None:
     pve.grant("/pool/ci", "CI-Operators", ProxmoxRole.PVE_VM_ADMIN)
 
 
+# Seeds the AD resource groups whose nested department groups derive effective access.
 def _wire_ad_nesting(cp: ControlPlane) -> None:
     ad = cp.ad
     # "Research" is composed of the scientific teams, so any scientist is
@@ -117,6 +120,7 @@ def _wire_ad_nesting(cp: ControlPlane) -> None:
     ad.nest_group("Lab-DAQ-Operators", "Lab")
 
 
+# Seeds the ops registries: equipment, inventory, vendors, and safety checks.
 def _wire_operations(cp: ControlPlane) -> None:
     ops = cp.ops
     # Equipment (maintenance_in_days: negative = overdue, small = due soon).
@@ -154,6 +158,7 @@ def _wire_operations(cp: ControlPlane) -> None:
     ]
 
 
+# Seeds the VLAN segments, the default-deny firewall policy, and the placed devices.
 def _wire_network(cp: ControlPlane) -> None:
     net = cp.network
     # VLAN segments: trust descends Corp > Lab > IoT, Guest is untrusted.
@@ -191,6 +196,7 @@ def _wire_network(cp: ControlPlane) -> None:
     net.add_device("cam-server-room", "02:00:00:00:00:25", "camera", "Corp", ip="10.10.9.99")
 
 
+# Seeds the backup/DR records for datasets and VMs (some deliberately stale).
 def _wire_backups(cp: ControlPlane) -> None:
     bk = cp.backups
     # TrueNAS datasets: hourly/daily snapshots replicated off-box. A couple are
@@ -211,6 +217,8 @@ def _wire_backups(cp: ControlPlane) -> None:
 def build_lab() -> ControlPlane:
     """Build and return a fully-populated control plane for the demo lab."""
     cp = ControlPlane()
+    # Order matters: wire the resources (shares/VMs/AD nesting/etc.) BEFORE onboarding
+    # people, since onboarding resolves each hire's access against these ACLs.
     _wire_truenas(cp)
     _wire_proxmox(cp)
     _wire_ad_nesting(cp)

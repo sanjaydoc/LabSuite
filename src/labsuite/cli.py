@@ -65,6 +65,7 @@ def _save(cp: ControlPlane, state: str | None) -> None:
 # Commands
 # --------------------------------------------------------------------------- #
 def cmd_org(args: argparse.Namespace) -> int:
+    """Print the seeded org: Okta users/groups, TrueNAS shares, and Proxmox guests."""
     cp = _load_or_build(args.state)
     _header("Okta users")
     for user in sorted(cp.okta.list_users(), key=lambda u: u.username):
@@ -85,6 +86,7 @@ def cmd_org(args: argparse.Namespace) -> int:
 
 
 def cmd_onboard(args: argparse.Namespace) -> int:
+    """Provision a new hire across the whole stack and print the result."""
     cp = _load_or_build(args.state)
     result = cp.onboard(args.name, _parse_department(args.department), args.role, title=args.title or "")
     _header(f"Onboarded {args.name}")
@@ -119,6 +121,7 @@ def cmd_onboard(args: argparse.Namespace) -> int:
 
 
 def cmd_offboard(args: argparse.Namespace) -> int:
+    """Deprovision a user same-day and verify that zero residual access remains."""
     cp = _load_or_build(args.state)
     try:
         result = cp.offboard(args.user)
@@ -142,6 +145,7 @@ def cmd_offboard(args: argparse.Namespace) -> int:
 
 
 def cmd_login(args: argparse.Namespace) -> int:
+    """Authenticate a user against Okta and print the issued session token."""
     cp = _load_or_build(args.state)
     password = args.password or DEMO_PASSWORD
     try:
@@ -155,6 +159,7 @@ def cmd_login(args: argparse.Namespace) -> int:
 
 
 def cmd_access(args: argparse.Namespace) -> int:
+    """Show everything a user can touch: groups, shares, VMs, MFA, and compliance."""
     cp = _load_or_build(args.state)
     report = cp.resolve_access(args.user)
     _header(f"Access report for {args.user}")
@@ -184,6 +189,7 @@ def cmd_access(args: argparse.Namespace) -> int:
 
 
 def cmd_check(args: argparse.Namespace) -> int:
+    """Make one audited allow/deny decision for a user against a TrueNAS/Proxmox resource."""
     cp = _load_or_build(args.state)
     if args.system == "truenas":
         decision = cp.check_truenas(args.user, args.resource, args.action)
@@ -198,6 +204,7 @@ def cmd_check(args: argparse.Namespace) -> int:
 
 
 def cmd_review(args: argparse.Namespace) -> int:
+    """Run the quarterly access review and print per-user entitlements plus anomaly flags."""
     cp = _load_or_build(args.state)
     review = cp.access_review()
     _header("Quarterly access review")
@@ -215,6 +222,7 @@ def cmd_review(args: argparse.Namespace) -> int:
 
 
 def cmd_train(args: argparse.Namespace) -> int:
+    """Record a training as complete (or --expire it), unlocking/revoking gated access."""
     cp = _load_or_build(args.state)
     if args.expire:
         cp.expire_training(args.user, args.training)
@@ -227,6 +235,7 @@ def cmd_train(args: argparse.Namespace) -> int:
 
 
 def cmd_mfa(args: argparse.Namespace) -> int:
+    """Show a user's MFA status, or --enroll them in Okta Verify to unlock CA resources."""
     cp = _load_or_build(args.state)
     if args.enroll:
         cp.enroll_mfa(args.user)
@@ -239,6 +248,7 @@ def cmd_mfa(args: argparse.Namespace) -> int:
 
 
 def cmd_compliance(args: argparse.Namespace) -> int:
+    """Print every user's training records (current vs lapsed)."""
     cp = _load_or_build(args.state)
     _header("Training records")
     records = cp.compliance.all_records()
@@ -254,6 +264,7 @@ def cmd_compliance(args: argparse.Namespace) -> int:
 
 
 def cmd_request(args: argparse.Namespace) -> int:
+    """File an access request for a user to join a group (pending approval)."""
     cp = _load_or_build(args.state)
     try:
         req = cp.request_access(args.user, args.group, args.why or "")
@@ -265,6 +276,7 @@ def cmd_request(args: argparse.Namespace) -> int:
 
 
 def cmd_requests(args: argparse.Namespace) -> int:
+    """List all access requests and their approval status."""
     cp = _load_or_build(args.state)
     _header("Access requests")
     for r in cp.requests.all():
@@ -277,6 +289,7 @@ def cmd_requests(args: argparse.Namespace) -> int:
 
 
 def cmd_approve(args: argparse.Namespace) -> int:
+    """Approve a pending access request, granting the requested group."""
     cp = _load_or_build(args.state)
     try:
         req = cp.approve_request(args.id)
@@ -288,6 +301,7 @@ def cmd_approve(args: argparse.Namespace) -> int:
 
 
 def cmd_deny(args: argparse.Namespace) -> int:
+    """Deny a pending access request, optionally recording a note."""
     cp = _load_or_build(args.state)
     try:
         req = cp.deny_request(args.id, note=args.note or "")
@@ -299,6 +313,7 @@ def cmd_deny(args: argparse.Namespace) -> int:
 
 
 def cmd_devices(args: argparse.Namespace) -> int:
+    """List the managed laptop fleet with image and assignment status."""
     cp = _load_or_build(args.state)
     _header("Managed device fleet")
     devices = sorted(cp.endpoints.list_devices(), key=lambda d: d.asset_tag)
@@ -311,6 +326,7 @@ def cmd_devices(args: argparse.Namespace) -> int:
 
 
 def cmd_export(args: argparse.Namespace) -> int:
+    """Export a report (access | saas | audit) as CSV to stdout or a file."""
     cp = _load_or_build(args.state)
     try:
         body = cp.export_csv(args.kind)
@@ -325,6 +341,7 @@ def cmd_export(args: argparse.Namespace) -> int:
 
 
 def cmd_readiness(args: argparse.Namespace) -> int:
+    """Show onboarding readiness: one hire's full checklist, or the day-one-ready summary."""
     cp = _load_or_build(args.state)
     if args.user:
         try:
@@ -348,6 +365,7 @@ def cmd_readiness(args: argparse.Namespace) -> int:
 
 
 def cmd_alerts(args: argparse.Namespace) -> int:
+    """Print the action center: every outstanding flag across the estate in one feed."""
     cp = _load_or_build(args.state)
     ac = cp.action_center()
     _header("Action center")
@@ -367,6 +385,7 @@ def cmd_alerts(args: argparse.Namespace) -> int:
 
 
 def cmd_campaign(args: argparse.Namespace) -> int:
+    """Drive an access-review campaign: start it, or certify/revoke a user, else show status."""
     cp = _load_or_build(args.state)
     if args.start:
         p = cp.start_review_campaign(args.name or "Access review")
@@ -406,6 +425,7 @@ def cmd_campaign(args: argparse.Namespace) -> int:
 
 
 def cmd_jit(args: argparse.Namespace) -> int:
+    """Break-glass admin: grant/revoke time-bound elevation, sweep lapsed grants, or show status."""
     cp = _load_or_build(args.state)
     if args.grant:
         user, group = args.grant
@@ -445,6 +465,7 @@ def cmd_jit(args: argparse.Namespace) -> int:
 
 
 def cmd_backup(args: argparse.Namespace) -> int:
+    """Run a backup now (--run RESOURCE) or report backup/DR health across datasets and VMs."""
     cp = _load_or_build(args.state)
     if args.run:
         rec = cp.run_backup(args.run)
@@ -463,6 +484,7 @@ def cmd_backup(args: argparse.Namespace) -> int:
 
 
 def cmd_net(args: argparse.Namespace) -> int:
+    """Network view: check east-west reachability, move a device's VLAN, or list segments."""
     cp = _load_or_build(args.state)
     # A single reachability check?
     if args.check:
@@ -503,6 +525,7 @@ def cmd_net(args: argparse.Namespace) -> int:
 
 
 def cmd_cost(args: argparse.Namespace) -> int:
+    """Print cost analytics: SaaS spend by department vs budget, plus vendor spend by category."""
     cp = _load_or_build(args.state)
     c = cp.cost_analytics()
     _header("Cost analytics")
@@ -523,6 +546,7 @@ def cmd_cost(args: argparse.Namespace) -> int:
 
 
 def cmd_ops(args: argparse.Namespace) -> int:
+    """Print the operations dashboard: SaaS spend plus every outstanding ops flag."""
     cp = _load_or_build(args.state)
     s = cp.ops_summary()
     _header("Operations dashboard")
@@ -550,6 +574,7 @@ def cmd_ops(args: argparse.Namespace) -> int:
 
 
 def cmd_saas(args: argparse.Namespace) -> int:
+    """List SaaS licences with per-seat and total monthly/annual cost."""
     cp = _load_or_build(args.state)
     _header("SaaS licences")
     for app in sorted(cp.ops.saas.values(), key=lambda a: a.name):
@@ -561,6 +586,7 @@ def cmd_saas(args: argparse.Namespace) -> int:
 
 
 def cmd_assets(args: argparse.Namespace) -> int:
+    """List equipment/assets with maintenance status (overdue, due soon, or ok)."""
     cp = _load_or_build(args.state)
     _header("Equipment / assets")
     for e in cp.ops.equipment:
@@ -575,6 +601,7 @@ def cmd_assets(args: argparse.Namespace) -> int:
 
 
 def cmd_inventory(args: argparse.Namespace) -> int:
+    """List reagent/consumable inventory, flagging items below their reorder point."""
     cp = _load_or_build(args.state)
     _header("Inventory")
     for i in cp.ops.inventory:
@@ -584,6 +611,7 @@ def cmd_inventory(args: argparse.Namespace) -> int:
 
 
 def cmd_vendors(args: argparse.Namespace) -> int:
+    """List vendor contracts by renewal date, flagging renewals due soon."""
     cp = _load_or_build(args.state)
     _header("Vendors / contracts")
     for v in sorted(cp.ops.vendors, key=lambda x: x.renewal_in_days):
@@ -593,6 +621,7 @@ def cmd_vendors(args: argparse.Namespace) -> int:
 
 
 def cmd_safety(args: argparse.Namespace) -> int:
+    """List facility safety checks, marking open issues vs passing ones."""
     cp = _load_or_build(args.state)
     _header("Facility safety checks")
     for s in cp.ops.safety:
@@ -603,6 +632,7 @@ def cmd_safety(args: argparse.Namespace) -> int:
 
 
 def cmd_sync(args: argparse.Namespace) -> int:
+    """Run the SCIM reconcile from Okta to Active Directory and print what changed."""
     cp = _load_or_build(args.state)
     report = cp.sync()
     _header("SCIM reconcile: Okta -> Active Directory")
@@ -613,6 +643,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
 
 def cmd_audit(args: argparse.Namespace) -> int:
+    """Print the tail of the audit trail (default last 20 events)."""
     cp = _load_or_build(args.state)
     _header(f"Audit log (last {args.tail})")
     for event in cp.audit.tail(args.tail):
@@ -689,6 +720,7 @@ def cmd_demo(args: argparse.Namespace) -> int:
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
+    """Launch the live FastAPI control plane with uvicorn (needs the [api] extra)."""
     try:
         import uvicorn
 
@@ -705,6 +737,15 @@ def cmd_serve(args: argparse.Namespace) -> int:
 # --------------------------------------------------------------------------- #
 # Argument parsing
 # --------------------------------------------------------------------------- #
+# HOW TO ADD A NEW COMMAND
+# 1. Write a `cmd_x(args)` function above that:
+#      - loads state via `_load_or_build(args.state)` to get a ControlPlane;
+#      - reads/mutates the control plane (call `control.*` / `cp.*` methods);
+#      - calls `_save(cp, args.state)` if (and only if) it mutated state;
+#      - prints its output and returns an int exit code (0 = ok).
+# 2. Register it in `build_parser()` below:
+#      sub.add_parser("x", help=...).set_defaults(func=cmd_x)
+#    Add `p.add_argument(...)` lines for any flags before `set_defaults`.
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="labsuite",

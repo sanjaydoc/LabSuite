@@ -206,7 +206,7 @@ const demoBackend = {
   async review() { return engine.review(); },
   async login(u, p) { return engine.login(u, p); },
   async audit() { return engine.audit.slice().reverse(); },
-  usernames() { return Object.keys(engine.users).sort(); },
+  async usernames() { return Object.keys(engine.users).sort(); },
 };
 
 const liveBackend = {
@@ -244,8 +244,11 @@ const liveBackend = {
       const claims = JSON.parse(atob(r.access_token.split(".")[1])); return { ok: true, token: r.access_token, claims };
     } catch { return { ok: false }; }
   },
-  async audit() { return []; },
-  usernames() { return Object.keys(engine.users).sort(); },
+  async audit() { try { return (await this._json("/audit")).events; } catch { return []; } },
+  async usernames() {
+    try { return (await this._json("/scim/v2/Users")).Resources.map((u) => u.userName).sort(); }
+    catch { return Object.keys(engine.users).sort(); }
+  },
 };
 
 let backend = demoBackend;
@@ -330,7 +333,7 @@ async function doOnboard() {
       <span class="k">Okta groups</span><span class="tags">${r.okta_groups.map((g) => `<span class="tag">${esc(g)}</span>`).join("")}</span>
     </div>
     <div class="grid2"><div><div class="label">TrueNAS</div><table>${nas}</table></div><div><div class="label">Proxmox</div><table>${pve}</table></div></div>`;
-  refreshUserSelects();
+  await refreshUserSelects();
 }
 
 async function doOffboard() {
@@ -346,7 +349,7 @@ async function doOffboard() {
       : '<span class="chip deny">✗ RESIDUAL ACCESS REMAINS</span>'}</div>
     ${r.clean ? '<p class="muted" style="margin:.8rem 0 0;font-size:.88rem">Re-resolved across TrueNAS + Proxmox after deprovisioning — nothing remains.</p>'
       : `<pre>${esc(JSON.stringify({ truenas: r.residual_truenas, proxmox: r.residual_proxmox }, null, 2))}</pre>`}`;
-  refreshUserSelects();
+  await refreshUserSelects();
 }
 
 async function renderExplorer() {
@@ -451,11 +454,11 @@ async function doLogin() {
  * ------------------------------------------------------------------ */
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
-function refreshUserSelects() {
-  const names = backend.usernames();
+async function refreshUserSelects() {
+  const names = await backend.usernames();
   for (const id of ["off-user", "ex-user"]) {
     const cur = byId(id).value;
-    byId(id).innerHTML = names.map((n) => `<option>${n}</option>`).join("");
+    byId(id).innerHTML = names.map((n) => `<option>${esc(n)}</option>`).join("");
     if (names.includes(cur)) byId(id).value = cur;
   }
 }
@@ -475,7 +478,6 @@ function init() {
   $$(".navitem").forEach((b) => b.onclick = () => go(b.dataset.view));
   $$("[data-goto]").forEach((el) => el.onclick = () => go(el.dataset.goto));
   fillRoleSelect();
-  refreshUserSelects();
   byId("lg-pass").value = D.demo_password;
   byId("lg-hint").textContent = `Demo password for every seeded account: ${D.demo_password}`;
   byId("ob-submit").onclick = doOnboard;
@@ -484,7 +486,12 @@ function init() {
   byId("ex-sys").onchange = fillCheckControls;
   byId("ex-check").onclick = doCheck;
   byId("lg-submit").onclick = doLogin;
-  detectMode().then(() => go("overview"));
+  // Detect live vs demo first, THEN populate the user lists from that backend
+  // (so onboarding/offboarding on a live server drive the real user set).
+  detectMode().then(async () => {
+    await refreshUserSelects();
+    go("overview");
+  });
 }
 
 document.addEventListener("DOMContentLoaded", init);

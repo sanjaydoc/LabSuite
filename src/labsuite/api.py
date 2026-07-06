@@ -127,6 +127,12 @@ def create_app(cp: ControlPlane | None = None) -> FastAPI:
     def review() -> dict:
         return control.access_review()
 
+    @app.get("/audit")
+    def audit(limit: int = 50) -> dict:
+        events = [e.to_dict() for e in control.audit.tail(limit)]
+        events.reverse()  # most-recent first, matching the UI
+        return {"events": events}
+
     # --------------------------------------------------------------- #
     # Web GUI + marketing site
     # --------------------------------------------------------------- #

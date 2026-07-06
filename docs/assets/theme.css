@@ -146,8 +146,12 @@ pre {
 .brand { display: flex; align-items: center; gap: .55rem; font-weight: 800; font-size: 1.15rem; letter-spacing: -.02em; }
 .brand svg { width: 26px; height: 26px; }
 .nav-links { display: flex; align-items: center; gap: 1.4rem; }
-.nav-links a { font-size: .92rem; color: var(--ink-2); font-weight: 500; }
-.nav-links a:hover { color: var(--ink); }
+/* Plain nav links are grey ink; buttons (.btn) keep their own white text --
+   scope this rule so it doesn't override the button's colour (specificity clash). */
+.nav-links a:not(.btn) { font-size: .92rem; color: var(--ink-2); font-weight: 500; }
+.nav-links a:not(.btn):hover { color: var(--ink); }
+.nav-links a.btn { color: #fff; }
+.nav-links a.btn.ghost { color: var(--ink); }
 
 /* --- tables ------------------------------------------------------------ */
 table { border-collapse: collapse; width: 100%; font-size: .9rem; }

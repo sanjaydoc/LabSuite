@@ -163,6 +163,14 @@ onboarding, access resolution, and reviews with nothing installed.
     <td align="center"><sub><b>Overview</b> — the seeded lab at a glance.</sub></td>
     <td align="center"><sub><b>Onboard</b> — the form and the resolved downstream access it produces.</sub></td>
   </tr>
+  <tr>
+    <td width="50%"><img src="docs/media/dashboard-saas.png" alt="SaaS & cost view with spend tiles and per-app seats" /></td>
+    <td width="50%"><img src="docs/media/dashboard-ops.png" alt="Lab operations view: equipment, inventory, vendors, safety with flags" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub><b>SaaS &amp; cost</b> — who has a seat in what, and the monthly/annual spend.</sub></td>
+    <td align="center"><sub><b>Lab ops</b> — equipment maintenance, inventory, vendor renewals, and safety flags.</sub></td>
+  </tr>
 </table>
 
 ## What makes it more than a toy

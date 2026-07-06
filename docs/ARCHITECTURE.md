@@ -107,6 +107,29 @@ SCIM engine depend only on these. The in-memory classes (`OktaDirectory`,
 `adapters/live.py` holds skeletons that document the real API calls for a
 production swap. No control-plane code changes when you swap an adapter.
 
+## Beyond access: endpoints, compliance, operations
+
+The control plane also owns the rest of day-to-day IT/ops, so onboarding and
+offboarding are complete and the platform is the single source of truth.
+
+- **Endpoints (`endpoints.py`).** Onboarding assigns a managed laptop *image* by
+  role (`policy.IMAGE_CATALOG`: OS, disk encryption, MDM, MFA, config-management
+  agent). Offboarding flags the device **wipe & return**. Swap `DeviceFleet` for
+  an MDM-backed adapter (`adapters.live.MdmEndpointProvider`).
+- **Compliance (`compliance.py`).** A register of training status (current /
+  expired / missing). Gated shares (`policy.GATED_SHARES`) require the relevant
+  training to be *current*: `resolve_access` and `check_truenas` withhold a share
+  the user's groups otherwise grant, and restore it when the training is
+  completed — auto-revoking if it lapses. This unifies HR compliance with IT
+  access.
+- **Operations (`operations.py`).** The ops source of truth: SaaS licences (who
+  has a seat + monthly/annual spend + orphaned-seat detection), equipment
+  (maintenance/calibration due + overdue), inventory (low-stock reorder), vendors
+  (upcoming renewals + annual cost), and facility safety (open issues).
+  Onboarding grants baseline + role SaaS seats; offboarding reclaims them.
+
+All of these persist in the control-plane snapshot and write to the same audit log.
+
 ## State & persistence
 
 The whole control plane serialises to JSON (`ControlPlane.to_dict` / `from_dict`),

@@ -2,11 +2,11 @@
 
 # 🔐 LabSuite
 
-**A from-scratch identity-to-infrastructure access-governance control plane — the lab's IT suite, wired the way a real one is: Okta → Active Directory → TrueNAS + Proxmox.**
+**A from-scratch IT & operations control plane for a research lab — identity, endpoints, compliance, and day-to-day ops in one place, wired the way a real lab is: Okta → Active Directory → TrueNAS + Proxmox.**
 
 *Author: Dr. Sanjay Anbu*
 
-*Provision a hire across the whole stack in one call · deprovision same-day and prove it · resolve every allow/deny decision from identity down to storage and compute — all audited.*
+*Onboard a hire across identity, a managed laptop, training, and SaaS in one call · deprovision same-day and prove it · gate sensitive lab data on current training · track licence spend, equipment, inventory, vendors, and safety — all audited.*
 
 ![CI](https://github.com/sanjaydoc/LabSuite/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.10%20|%203.11%20|%203.12-blue)
@@ -117,6 +117,26 @@ and Proxmox. *Upward* is a decision: "can she start VM 101?" resolves her
 **effective AD groups** (following nesting) → checks the Proxmox ACL on that VM's
 path → allow/deny, written to the audit log. TrueNAS and Proxmox never see Okta —
 they only ask AD for effective groups, exactly as the real systems are wired.
+
+## Modules — one platform every team uses
+
+LabSuite started as identity→infrastructure access and grew into the **central
+day-to-day ops tool** for a lab, modelled on Merge Labs' real teams (Bio, In-Vivo,
+Delivery, Platform, Data-Science + Lab-Ops, Compliance, Facilities, Legal, IT):
+
+| Module | What it does | Who it serves |
+|---|---|---|
+| **Identity & access** | Onboard/offboard, SCIM sync, nested-group ACLs, audited allow/deny, access reviews | IT, everyone |
+| **Endpoints / devices** | Images + ships a managed laptop per role (encryption, MDM, MFA, Iru/Ansible); wipe & return at offboard | IT |
+| **Compliance-gated access** | Training records (IACUC, biosafety…) that gate sensitive lab data; access auto-revokes when training lapses | Compliance, In-Vivo, IT |
+| **SaaS & cost** | Who has a seat in what and **what it costs**; orphaned-seat detection; provisioned on onboard, reclaimed on offboard | IT, Finance |
+| **Equipment & maintenance** | Instrument registry with calibration/maintenance cadence; overdue + due-soon flags | Lab-Ops, Facilities |
+| **Inventory** | Reagents/consumables with reorder points; low-stock flags | Lab-Ops, Vector Core |
+| **Vendors & renewals** | Contracts with renewal dates + annual cost; upcoming-renewal flags | Lab-Ops, IT |
+| **Facility safety** | Walkthrough checklists; open-issue flags | Facilities |
+
+Every mutation and decision across all modules lands in the same append-only
+audit log.
 
 ## The web dashboard
 
@@ -230,14 +250,27 @@ Drive individual operations:
 
 ```bash
 labsuite org                                        # the seeded lab
-labsuite onboard --name "Nadia Rahman" --department Research --role research-scientist
-labsuite access --user nrahman                      # everything she can touch
-labsuite check --user nrahman --system proxmox --resource 101 --action vm.power
+labsuite onboard --name "Nadia Rahman" --department In-Vivo --role invivo-scientist
+labsuite access --user nrahman                      # everything she can touch (+ training status)
+labsuite check --user nrahman --system truenas --resource invivo-study-data --action modify
+labsuite train --user nrahman --training IACUC      # complete a training (unlocks gated access)
 labsuite offboard --user nrahman                    # same-day, verified clean
-labsuite review                                     # access review + flags
+
+# governance + operations
+labsuite review                                     # access review + anomaly flags
+labsuite compliance                                 # training records
+labsuite devices                                    # managed laptop fleet
+labsuite ops                                        # ops dashboard (SaaS spend + flags)
+labsuite saas | assets | inventory | vendors | safety
 labsuite audit --tail 15                            # the audit trail
 labsuite serve                                      # live FastAPI API + GUI (needs .[api])
 ```
+
+**Departments:** Bio, In-Vivo, Delivery, Platform, Data-Science, Lab, Lab-Ops,
+Compliance, Facilities, Legal, IT.
+**Roles:** ml-scientist, research-scientist, invivo-scientist, vector-core,
+platform-engineer, lab-technician, lab-ops, compliance, facilities,
+legal-counsel, it-admin.
 
 Add `--state lab.json` to any command to persist the control plane between runs.
 
@@ -246,28 +279,32 @@ Add `--state lab.json` to any command to persist the control plane between runs.
 `labsuite demo` runs a scripted story and prints each step:
 
 ```
-2. Onboard a new research scientist
-   created nrahman (nrahman@lab.local), temp password bright-otter-6877
-   Okta groups: Everyone, Research
-   -> TrueNAS: {'research-data': 'modify', 'gpu-scratch': 'modify', 'lab-raw-signals': 'read', 'home': 'read'}
-   -> Proxmox: {101: 'PVEVMUser', 102: 'PVEVMUser'}
-   note: GPU access came from AD nesting (Research is nested in GPU-Cluster-Users), not a per-user grant.
+2. Onboard a new in-vivo scientist
+   created nrahman (nrahman@lab.local), temp password bright-quartz-1227
+   Okta groups: Everyone, In-Vivo  (In-Vivo -> Research via AD nesting)
+   -> TrueNAS: {'home','research-data','eln','sequencing-imaging','model-artifacts','vector-core-lims'}
+   -> Device: MacBook Pro 14 · mac-standard · FileVault + Okta Verify + Iru
+   -> Training required (pending): Data-Handling, Biosafety, IACUC
+      gated invivo-study-data until IACUC, Biosafety complete
 
-4. Access decisions (resolved Okta -> AD -> resource)
-   ALLOW    start her training VM       (role PVEVMUser via GPU-Cluster-Users)
-   DENY     migrate it (needs admin)    (role PVEVMUser < required PVEVMAdmin)
-   ALLOW    write research data         (granted via Research)
-   DENY     read legal contracts        (no group grants sufficient access)
+4. Access decisions (resolved Okta -> AD -> compliance -> resource)
+   ALLOW    write research data          (granted via Research)
+   DENY     write in-vivo study data     (BLOCKED — training not current: IACUC, Biosafety)
+   DENY     read legal contracts         (no group grants sufficient access)
 
-5. Offboard her -- same-day, verified
+5. Compliance gate: she completes IACUC + biosafety training
+   ALLOW    in-vivo study data (now trained)   (granted via In-Vivo)
+
+6. Offboard her -- same-day, verified
    deprovisioned across Okta + AD + downstream -> CLEAN: zero residual access
-   re-login attempt: correctly rejected
 ```
 
-The GPU access is the tell: nobody granted `nrahman` the GPU cluster directly —
-she's in `Research`, and `Research` is **nested inside** `GPU-Cluster-Users` in
-AD, so the entitlement is inherited and there is no per-user grant to forget to
-revoke. That is the whole point of doing groups properly.
+Two tells here. **Nesting:** nobody grants `In-Vivo` staff the `Research` shares
+directly — `In-Vivo` is *nested inside* `Research`, so the entitlement is
+inherited with no per-user grant to forget. **Compliance gating:** her group
+membership makes her *eligible* for in-vivo study data, but access is withheld
+until IACUC + biosafety training is current — and it would auto-revoke the moment
+that training lapses.
 
 ## Swappable by design
 
@@ -332,12 +369,14 @@ command reference for every operation.
 
 | What the role asks for | Where it lives in LabSuite |
 |---|---|
-| **Own onboarding/offboarding end-to-end; deprovision same-day** | `ControlPlane.onboard` / `offboard` — the latter *verifies* zero residual access |
+| **Onboarding/offboarding end-to-end; deprovision same-day** | `ControlPlane.onboard` / `offboard` — the latter *verifies* zero residual access |
+| **Laptops imaged & shipped day one; wiped on exit** | `endpoints.py` — image-per-role fleet, wipe & return at offboard |
 | **Inherit and document Okta → AD → TrueNAS + Proxmox, then operate it** | The entire project + [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | **Scalable, auditable processes** | Append-only `AuditLog`; every mutation and decision recorded |
 | **Okta admin: SSO, SCIM, group design** | `okta.py` + the idempotent `ScimSync` engine |
 | **AD admin: group policy, permissions, nesting** | `active_directory.py` — nested groups + transitive resolution |
-| **Baseline security hygiene; quarterly access reviews** | `ControlPlane.access_review` with anomaly flags |
+| **Source of truth for who has access to what and what it costs** | `operations.py` SaaS module — seats + monthly/annual spend + orphaned seats |
+| **Baseline security hygiene; quarterly access reviews** | `access_review` anomaly flags + compliance-gated access (`compliance.py`) |
 | **Bias toward automation; document what you build** | One-command `onboard`/`offboard`; typed, tested, CI-green, documented |
 
 ## Project layout
@@ -350,15 +389,18 @@ labsuite/
 │   ├── scim.py              #     the Okta -> AD sync engine (idempotent reconcile)
 │   ├── truenas.py           # 3a · file storage (group-based share ACLs)
 │   ├── proxmox.py           # 3b · VMs / servers (hierarchical path ACLs + roles)
-│   ├── engine.py            # the ControlPlane — onboard/offboard/resolve/check/review
-│   ├── policy.py            # role blueprints: who gets what by default
+│   ├── endpoints.py         # managed laptop fleet (image per role, wipe & return)
+│   ├── compliance.py        # training records that gate sensitive access
+│   ├── operations.py        # SaaS+cost · equipment · inventory · vendors · safety
+│   ├── engine.py            # the ControlPlane — onboard/offboard/resolve/check/review/ops
+│   ├── policy.py            # role blueprints, image catalog, training + gating rules
 │   ├── audit.py             # append-only audit log
 │   ├── crypto.py            # PBKDF2 passwords + HS256 session tokens (stdlib only)
-│   ├── seed.py              # a realistic seeded lab, onboarded through the real path
+│   ├── seed.py              # the seeded Merge-Labs org, onboarded through the real path
 │   ├── cli.py               # the `labsuite` command-line control plane
-│   ├── api.py               # optional FastAPI: OIDC-ish + SCIM + admin + dashboard
+│   ├── api.py               # optional FastAPI: OIDC-ish + SCIM + admin + ops + GUI
 │   └── adapters/            # base.py (interfaces) · live.py (real-system skeletons)
-├── tests/                   # crypto · SCIM idempotency · nesting · access · e2e · API
+├── tests/                   # crypto · SCIM · nesting · access · devices · compliance · ops · e2e · API
 ├── docs/                    # ARCHITECTURE.md · website (index.html) · GUI (app/)
 └── .github/workflows/       # CI (ruff + pytest on 3.10 / 3.11 / 3.12)
 ```

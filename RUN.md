@@ -37,26 +37,39 @@ or `python -m labsuite.cli` if you prefer not to install the entry point.
 labsuite demo              # scripted end-to-end story (start here)
 labsuite org               # print the seeded lab
 
-# Onboard / offboard
-labsuite onboard --name "Nadia Rahman" --department Research --role research-scientist
+# Onboard / offboard (identity + device + training + SaaS, all in one)
+labsuite onboard --name "Nadia Rahman" --department In-Vivo --role invivo-scientist
 labsuite offboard --user nrahman
 
 # Inspect access
 labsuite access --user anguyen
-labsuite check  --user anguyen --system truenas --resource research-data --action modify
-labsuite check  --user anguyen --system proxmox --resource 101 --action vm.power
+labsuite check  --user talvarez --system truenas --resource invivo-study-data --action modify
+labsuite check  --user rpatel   --system proxmox --resource 101 --action vm.power
 
-# Operate
+# Compliance-gated access
+labsuite train  --user nrahman --training IACUC          # complete a training
+labsuite train  --user nrahman --training Biosafety --expire   # lapse it (revokes gated access)
+labsuite compliance                                       # all training records
+
+# Governance + operations
 labsuite login   --user anguyen           # demo password is used by default
 labsuite sync                             # run the SCIM reconcile
 labsuite review                           # access review + anomaly flags
+labsuite devices                          # managed laptop fleet
+labsuite ops                              # ops dashboard (SaaS spend + flags)
+labsuite saas                             # SaaS licences + cost
+labsuite assets                           # equipment + maintenance
+labsuite inventory                        # reagent / consumable stock
+labsuite vendors                          # vendor contracts + renewals
+labsuite safety                           # facility safety checks
 labsuite audit --tail 20                  # the audit trail
 ```
 
-**Roles** (`--role`): `research-scientist`, `lab-technician`, `platform-engineer`,
-`operations`, `legal-counsel`, `security-analyst`, `it-admin`.
-**Departments** (`--department`): `Research`, `Platform`, `Lab`, `Operations`,
-`Legal`, `People`, `Security`, `IT`.
+**Roles** (`--role`): `ml-scientist`, `research-scientist`, `invivo-scientist`,
+`vector-core`, `platform-engineer`, `lab-technician`, `lab-ops`, `compliance`,
+`facilities`, `legal-counsel`, `it-admin`.
+**Departments** (`--department`): `Bio`, `In-Vivo`, `Delivery`, `Platform`,
+`Data-Science`, `Lab`, `Lab-Ops`, `Compliance`, `Facilities`, `Legal`, `IT`.
 
 ### Persisting state between runs
 
@@ -64,8 +77,9 @@ By default each command starts from the freshly-seeded lab in memory. Add
 `--state PATH` to load/save a JSON snapshot so changes persist:
 
 ```bash
-labsuite --state lab.json onboard --name "Nadia Rahman" --department Research --role research-scientist
-labsuite --state lab.json access --user nrahman     # sees the onboarded user
+labsuite --state lab.json onboard --name "Nadia Rahman" --department In-Vivo --role invivo-scientist
+labsuite --state lab.json train --user nrahman --training IACUC
+labsuite --state lab.json access --user nrahman     # sees the onboarded user + training
 labsuite --state lab.json offboard --user nrahman
 ```
 
@@ -76,12 +90,14 @@ pip install -e ".[api]"
 labsuite serve                 # http://127.0.0.1:8000
 ```
 
-- `http://127.0.0.1:8000/`        — the web dashboard (GUI)
+- `http://127.0.0.1:8000/`        — the web dashboard (GUI, all modules)
 - `http://127.0.0.1:8000/docs`    — interactive OpenAPI docs
 - `POST /oauth/token`             — password grant → session token
 - `GET  /scim/v2/Users`           — the SCIM 2.0 user feed
 - `GET  /me`                      — resolve the bearer token's identity + access
 - `POST /admin/onboard` / `offboard`, `POST /sync`, `GET /access/{user}`, `GET /review`
+- `GET /devices`, `GET /compliance`, `POST /compliance/complete` · `/expire`
+- `GET /ops`, `GET /saas`, `GET /assets`, `GET /inventory`, `GET /vendors`, `GET /safety`
 
 Example:
 

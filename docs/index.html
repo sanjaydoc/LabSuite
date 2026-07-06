@@ -60,9 +60,9 @@
 
   <header class="hero">
     <div class="wrap">
-      <div class="eyebrow">Identity &amp; access governance</div>
-      <h1>The lab's identity stack, operated end&#8209;to&#8209;end.</h1>
-      <p class="lead">A from-scratch control plane that provisions a hire from <strong>Okta</strong> through <strong>Active Directory</strong> down to <strong>TrueNAS</strong> and <strong>Proxmox</strong>, deprovisions same-day and proves it, and resolves every allow/deny decision along the chain — all audited.</p>
+      <div class="eyebrow">The lab's IT &amp; operations control plane</div>
+      <h1>One platform to run the lab, end&#8209;to&#8209;end.</h1>
+      <p class="lead">A from-scratch control plane that provisions a hire across <strong>Okta → Active Directory → TrueNAS + Proxmox</strong>, a managed laptop, training, and SaaS in one call — deprovisions same-day and proves it, gates sensitive data on current training, and tracks licence spend, equipment, inventory, vendors, and safety. All audited.</p>
       <div class="cta-row">
         <a class="btn" href="app/">Open the live demo →</a>
         <a class="btn ghost" href="https://github.com/sanjaydoc/LabSuite">View on GitHub ↗</a>
@@ -131,7 +131,10 @@
         <div class="card feature"><h3>Nested-group resolution</h3><p>A researcher gets GPU access because <code>Research</code> is nested in <code>GPU-Cluster-Users</code> — inherited, not hand-granted.</p></div>
         <div class="card feature"><h3>Audited allow/deny</h3><p>Every decision records the exact groups that granted it. Nothing happens off the record.</p></div>
         <div class="card feature"><h3>Access reviews</h3><p>A quarterly-style report flags stale access, FULL on sensitive shares, and datacenter-wide admin.</p></div>
-        <div class="card feature"><h3>Swappable adapters</h3><p>Each layer sits behind an interface. Drop in the real Okta / AD / TrueNAS / Proxmox APIs without touching the control plane.</p></div>
+        <div class="card feature"><h3>Devices on day one</h3><p>Onboarding images and ships a managed laptop per role (encryption, MDM, Okta MFA, Iru/Ansible); offboarding flags it wipe &amp; return.</p></div>
+        <div class="card feature"><h3>Compliance-gated access</h3><p>Sensitive lab data stays locked until IACUC + biosafety training is current — and auto-revokes the moment it lapses.</p></div>
+        <div class="card feature"><h3>SaaS, cost &amp; ops</h3><p>Who has what and what it costs, plus equipment maintenance, inventory, vendor renewals, and facility safety — one source of truth.</p></div>
+        <div class="card feature"><h3>Swappable adapters</h3><p>Each layer sits behind an interface. Drop in the real Okta / AD / TrueNAS / Proxmox / MDM APIs without touching the control plane.</p></div>
         <div class="card feature"><h3>Zero-dependency core</h3><p>Pure Python. Runs anywhere, in CI, on 3.10–3.12. FastAPI only for the optional live API.</p></div>
         <div class="card feature"><h3>CLI + HTTP API + GUI</h3><p>Drive it from the terminal, an OIDC-ish HTTP API with a SCIM feed, or this web dashboard.</p></div>
       </div>

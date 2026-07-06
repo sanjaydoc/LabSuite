@@ -86,7 +86,7 @@ p { margin: 0 0 1rem; color: var(--ink-2); }
 
 /* --- buttons: black pill with arrow ------------------------------------ */
 .btn {
-  display: inline-flex; align-items: center; gap: .5rem;
+  display: inline-flex; align-items: center; gap: .5rem; white-space: nowrap;
   background: var(--ink); color: #fff;
   font-family: var(--sans); font-weight: 700; font-size: .95rem;
   padding: .72rem 1.15rem; border: 0; border-radius: 12px; cursor: pointer;
@@ -162,6 +162,12 @@ th { color: var(--muted); font-weight: 600; font-size: .78rem; }
 .center { text-align: center; }
 
 @media (max-width: 720px) {
+  .nav .wrap { height: 56px; gap: .5rem; padding: 0 16px; }
+  .brand { font-size: 1rem; gap: .4rem; }
+  .brand svg { width: 22px; height: 22px; }
+  .brand .muted { display: none; }        /* hide the "control plane" subtitle */
+  .nav-links { gap: .55rem; }
   .nav-links a:not(.btn) { display: none; }
+  .nav-links .btn-sm { padding: .4rem .7rem; font-size: .82rem; }
   .section { padding: 44px 0; }
 }

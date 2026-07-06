@@ -55,7 +55,7 @@ input:focus, select:focus { outline: none; border-color: var(--ink); }
 .audit-row .act { font-weight: 600; }
 @media (max-width: 720px) { .audit-row { grid-template-columns: 1fr auto; } .audit-row .sys, .audit-row .det { display: none; } }
 
-.modebadge { font-size: .72rem; font-weight: 700; padding: .2rem .55rem; border-radius: var(--pill); }
+.modebadge { font-size: .72rem; font-weight: 700; padding: .2rem .55rem; border-radius: var(--pill); white-space: nowrap; }
 .modebadge.demo { background: #fff4e5; color: #a2661a; border: 1px solid #f0dcc0; }
 .modebadge.live { background: var(--ok-bg); color: var(--ok); border: 1px solid #cfe6da; }
 

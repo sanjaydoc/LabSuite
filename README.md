@@ -9,6 +9,7 @@
 *Onboard a hire across identity, a managed laptop, training, and SaaS in one call · deprovision same-day and prove it · gate sensitive lab data on current training · track licence spend, equipment, inventory, vendors, and safety — all audited.*
 
 ![CI](https://github.com/sanjaydoc/LabSuite/actions/workflows/ci.yml/badge.svg)
+![Features](https://img.shields.io/badge/features-20%2F20%20verified-success)
 ![Python](https://img.shields.io/badge/python-3.10%20|%203.11%20|%203.12-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000)
@@ -147,6 +148,37 @@ Delivery, Platform, Data-Science + Lab-Ops, Compliance, Facilities, Legal, IT):
 
 Every mutation and decision across all modules lands in the same append-only
 audit log.
+
+## Features — 20 / 20 verified in the GUI ✅
+
+Every operational view was tested end-to-end in the live dashboard (both the
+in-browser demo and the FastAPI-backed mode), on desktop and mobile. All 20 pass.
+
+| # | Feature | Where | Status |
+|---|---|---|---|
+| 1 | Overview + Action center — one inbox aggregating every flag | Operate → Overview | ✅ Verified |
+| 2 | Directory — everyone in Okta with resolved downstream access | Operate → Directory | ✅ Verified |
+| 3 | Onboard — provision a hire across the whole stack in one action | Operate → Onboard | ✅ Verified |
+| 4 | Offboard — deprovision same-day, verify zero residual access | Operate → Offboard | ✅ Verified |
+| 5 | Devices — managed laptop fleet, imaged per role (macOS / Windows / Linux) | Operate → Devices | ✅ Verified |
+| 6 | Onboarding readiness — day-one-ready checklist per hire | Operate → Readiness | ✅ Verified |
+| 7 | Access explorer + MFA — resolve the chain, test a decision, conditional access | Govern → Access explorer | ✅ Verified |
+| 8 | Access requests + approvals — self-service request → approve/deny | Govern → Requests | ✅ Verified |
+| 9 | Access review + CSV — entitlement report with anomaly flags | Govern → Access review | ✅ Verified |
+| 10 | Attestation campaign — certify / revoke per user, tracked to 100% | Govern → Access review | ✅ Verified |
+| 11 | Break-glass (JIT) admin — time-bound elevation that auto-expires | Govern → Break-glass | ✅ Verified |
+| 12 | Compliance — training gates that unlock / auto-revoke sensitive access | Govern → Compliance | ✅ Verified |
+| 13 | Audit log + CSV — append-only trail of every action | Govern → Audit log | ✅ Verified |
+| 14 | SaaS & cost — seats + spend; grant / revoke a seat | Operations → SaaS & cost | ✅ Verified |
+| 15 | Cost analytics & budgets — SaaS by dept vs budget, vendor spend | Operations → Cost analytics | ✅ Verified |
+| 16 | Lab ops — equipment / inventory / vendors / safety, with actions | Operations → Lab ops | ✅ Verified |
+| 17 | Network segmentation — VLAN matrix, reachability check, quarantine | Operations → Network | ✅ Verified |
+| 18 | Backup / DR health — snapshot status, stale flags, back-up-now | Operations → Backup / DR | ✅ Verified |
+| 19 | Architecture — the Okta → AD → TrueNAS + Proxmox chain, explained | Learn → Architecture | ✅ Verified |
+| 20 | Sign-in demo — authenticate a seeded user, issue a session token | Learn → Sign-in demo | ✅ Verified |
+
+Backed by an automated suite (137 tests, `ruff`-clean, CI on Python 3.10–3.12).
+Try them yourself in the [**live demo**](https://sanjaydoc.github.io/LabSuite/app/).
 
 ## The web dashboard
 

@@ -32,6 +32,8 @@
     @media (max-width: 560px) { .features { grid-template-columns: 1fr; } }
     .feature h3 { font-family: var(--sans); font-weight: 700; font-size: 1.05rem; margin-bottom: .4rem; }
     .feature p { font-size: .9rem; margin: 0; }
+    .vitem { font-size: .95rem; padding: .5rem 0; border-bottom: 1px solid var(--hair); }
+    .vitem::before { content: "✓"; color: var(--ok); font-weight: 800; margin-right: .6rem; }
 
     .maprow { display: grid; grid-template-columns: 1.1fr 1.2fr .9fr; gap: 0; }
     .footer { padding: 40px 0 64px; color: var(--muted); font-size: .88rem; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
@@ -144,6 +146,37 @@
         <div class="card feature"><h3>Zero-dependency core</h3><p>Pure Python. Runs anywhere, in CI, on 3.10–3.12. FastAPI only for the optional live API.</p></div>
         <div class="card feature"><h3>CLI + HTTP API + GUI</h3><p>Drive it from the terminal, an OIDC-ish HTTP API with a SCIM feed, or this web dashboard.</p></div>
       </div>
+    </div>
+  </section>
+
+  <section class="section" id="verified">
+    <div class="wrap">
+      <div class="eyebrow">Tested end-to-end</div>
+      <h2 style="margin-bottom:.6rem">20 features. All verified in the GUI. <span style="color:var(--ok)">✓</span></h2>
+      <p style="max-width:60ch;margin-bottom:1.8rem">Every operational view was driven end-to-end in the live dashboard — desktop and mobile, demo and API-backed. Backed by 137 automated tests, <code>ruff</code>-clean, on Python 3.10–3.12.</p>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:.2rem 2rem">
+        <div class="vitem">Overview + Action center</div>
+        <div class="vitem">SaaS &amp; cost (seats + spend)</div>
+        <div class="vitem">Directory (resolved access)</div>
+        <div class="vitem">Cost analytics &amp; budgets</div>
+        <div class="vitem">Onboard (whole-stack)</div>
+        <div class="vitem">Lab ops (equipment/inventory/vendors/safety)</div>
+        <div class="vitem">Offboard (zero-residual, verified)</div>
+        <div class="vitem">Network segmentation (VLAN + reachability)</div>
+        <div class="vitem">Devices (macOS / Windows / Linux imaging)</div>
+        <div class="vitem">Backup / DR health</div>
+        <div class="vitem">Onboarding readiness checklist</div>
+        <div class="vitem">Access review + CSV</div>
+        <div class="vitem">Access explorer + MFA / conditional access</div>
+        <div class="vitem">Attestation campaign (certify / revoke)</div>
+        <div class="vitem">Access requests + approvals</div>
+        <div class="vitem">Break-glass (JIT) admin</div>
+        <div class="vitem">Compliance (training gates)</div>
+        <div class="vitem">Architecture explainer</div>
+        <div class="vitem">Audit log + CSV</div>
+        <div class="vitem">Sign-in demo (session token)</div>
+      </div>
+      <p style="margin-top:1.8rem"><a class="btn" href="app/">Open the live demo →</a></p>
     </div>
   </section>
 

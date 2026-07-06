@@ -182,6 +182,44 @@ def create_app(cp: ControlPlane | None = None) -> FastAPI:
     def safety() -> dict:
         return {"safety": [s.to_dict() for s in control.ops.safety]}
 
+    # ---- operations mutations (the fully-operable GUI) ------------- #
+    @app.post("/assets/maintenance")
+    def do_maintenance(asset_tag: str = Body(..., embed=True)) -> dict:
+        e = control.complete_maintenance(asset_tag)
+        if e is None:
+            raise HTTPException(status_code=404, detail=f"unknown asset {asset_tag!r}")
+        return e.to_dict()
+
+    @app.post("/inventory/reorder")
+    def do_reorder(sku: str = Body(..., embed=True)) -> dict:
+        i = control.reorder_inventory(sku)
+        if i is None:
+            raise HTTPException(status_code=404, detail=f"unknown sku {sku!r}")
+        return i.to_dict()
+
+    @app.post("/safety/resolve")
+    def do_resolve(area: str = Body(...), check: str = Body(...)) -> dict:
+        s = control.resolve_safety(area, check)
+        if s is None:
+            raise HTTPException(status_code=404, detail="unknown safety check")
+        return s.to_dict()
+
+    @app.post("/vendors/renew")
+    def do_renew(name: str = Body(..., embed=True)) -> dict:
+        v = control.renew_vendor(name)
+        if v is None:
+            raise HTTPException(status_code=404, detail=f"unknown vendor {name!r}")
+        return v.to_dict()
+
+    @app.post("/saas/grant")
+    def do_saas_grant(username: str = Body(...), app_name: str = Body(...)) -> dict:
+        control.grant_saas_seat(username, app_name)
+        return {"username": username, "app": app_name, "granted": True}
+
+    @app.post("/saas/revoke")
+    def do_saas_revoke(username: str = Body(...), app_name: str = Body(...)) -> dict:
+        return {"username": username, "app": app_name, "revoked": control.revoke_saas_seat(username, app_name)}
+
     # --------------------------------------------------------------- #
     # Web GUI + marketing site
     # --------------------------------------------------------------- #

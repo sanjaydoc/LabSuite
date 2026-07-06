@@ -455,6 +455,40 @@ class ControlPlane:
         """SaaS spend + flags across equipment, inventory, vendors, and safety."""
         return self.ops.summary(self._is_active)
 
+    def complete_maintenance(self, asset_tag: str, *, actor: str = "lab-ops"):
+        e = self.ops.complete_maintenance(asset_tag)
+        if e is not None:
+            self.audit.record(actor, "equipment.maintenance", asset_tag, "operations", detail="serviced")
+        return e
+
+    def reorder_inventory(self, sku: str, *, actor: str = "lab-ops"):
+        i = self.ops.reorder(sku)
+        if i is not None:
+            self.audit.record(actor, "inventory.reorder", sku, "operations", detail=f"qty -> {i.qty}")
+        return i
+
+    def resolve_safety(self, area: str, check: str, *, actor: str = "facilities"):
+        s = self.ops.resolve_safety(area, check)
+        if s is not None:
+            self.audit.record(actor, "safety.resolve", f"{area}:{check}", "operations")
+        return s
+
+    def renew_vendor(self, name: str, *, actor: str = "it-admin"):
+        v = self.ops.renew_vendor(name)
+        if v is not None:
+            self.audit.record(actor, "vendor.renew", name, "operations")
+        return v
+
+    def grant_saas_seat(self, username: str, app: str, *, actor: str = "it-admin") -> None:
+        self.ops.grant_saas(username, app)
+        self.audit.record(actor, "saas.grant", username, "saas", detail=app)
+
+    def revoke_saas_seat(self, username: str, app: str, *, actor: str = "it-admin") -> bool:
+        ok = self.ops.revoke_saas_seat(username, app)
+        if ok:
+            self.audit.record(actor, "saas.revoke", username, "saas", detail=app)
+        return ok
+
     # ------------------------------------------------------------------ #
     # Serialisation (persist state between CLI invocations)
     # ------------------------------------------------------------------ #

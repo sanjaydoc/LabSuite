@@ -172,6 +172,13 @@ class Operations:
             app.assignees.discard(username)
         return sorted(removed)
 
+    def revoke_saas_seat(self, username: str, app: str) -> bool:
+        entry = self.saas.get(app)
+        if entry and username in entry.assignees:
+            entry.assignees.discard(username)
+            return True
+        return False
+
     def apps_for(self, username: str) -> list[str]:
         return sorted(name for name, app in self.saas.items() if username in app.assignees)
 
@@ -205,6 +212,38 @@ class Operations:
 
     def annual_saas_cost(self) -> float:
         return round(self.monthly_spend() * 12, 2)
+
+    # ---- Mutations (used by the fully-operable GUI/API) ------------- #
+    def complete_maintenance(self, asset_tag: str, cadence_days: int = 90) -> Equipment | None:
+        """Log maintenance done -- reset the countdown to the next cadence."""
+        for e in self.equipment:
+            if e.asset_tag == asset_tag:
+                e.maintenance_in_days = cadence_days
+                return e
+        return None
+
+    def reorder(self, sku: str) -> InventoryItem | None:
+        """Place a restock order -- bring qty up to 2x the reorder point."""
+        for i in self.inventory:
+            if i.sku == sku:
+                i.qty += i.reorder_point * 2
+                return i
+        return None
+
+    def resolve_safety(self, area: str, check: str) -> SafetyCheck | None:
+        for s in self.safety:
+            if s.area == area and s.check == check:
+                s.status = "pass"
+                s.note = ""
+                return s
+        return None
+
+    def renew_vendor(self, name: str, cadence_days: int = 365) -> Vendor | None:
+        for v in self.vendors:
+            if v.name == name:
+                v.renewal_in_days = cadence_days
+                return v
+        return None
 
     def summary(self, is_active) -> dict:
         return {

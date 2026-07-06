@@ -53,3 +53,50 @@ def test_operations_survive_serialisation():
     restored = type(cp).from_dict(json.loads(json.dumps(cp.to_dict())))
     assert restored.ops.monthly_spend() == cp.ops.monthly_spend()
     assert len(restored.ops.equipment) == len(cp.ops.equipment)
+
+
+def test_complete_maintenance_clears_overdue():
+    cp = build_lab()
+    assert "Zeiss LSM 980 Confocal" in cp.ops_summary()["overdue_equipment"]
+    e = cp.complete_maintenance("EQ-003")  # the overdue confocal
+    assert e is not None and e.maintenance_in_days > 0
+    assert "Zeiss LSM 980 Confocal" not in cp.ops_summary()["overdue_equipment"]
+
+
+def test_reorder_clears_low_stock():
+    cp = build_lab()
+    assert any("DMEM" in x for x in cp.ops_summary()["low_stock"])
+    i = cp.reorder_inventory("RG-DMEM")
+    assert i is not None and not i.low
+    assert not any("DMEM" in x for x in cp.ops_summary()["low_stock"])
+
+
+def test_resolve_safety_closes_issue():
+    cp = build_lab()
+    open_before = len(cp.ops_summary()["open_safety"])
+    cp.resolve_safety("In-Vivo Suite", "Sharps container <75% full")
+    assert len(cp.ops_summary()["open_safety"]) == open_before - 1
+
+
+def test_renew_vendor_pushes_out_renewal():
+    cp = build_lab()
+    assert any("Kandji" in x for x in cp.ops_summary()["upcoming_renewals"])
+    cp.renew_vendor("Kandji")
+    assert not any("Kandji" in x for x in cp.ops_summary()["upcoming_renewals"])
+
+
+def test_saas_seat_grant_and_revoke():
+    cp = build_lab()
+    before = cp.ops.monthly_spend()
+    cp.grant_saas_seat("anguyen", "GitHub")  # bench scientist added to GitHub
+    assert cp.ops.monthly_spend() > before
+    assert cp.revoke_saas_seat("anguyen", "GitHub") is True
+    assert cp.ops.monthly_spend() == before
+
+
+def test_mutations_are_audited():
+    cp = build_lab()
+    cp.complete_maintenance("EQ-003")
+    cp.reorder_inventory("RG-DMEM")
+    actions = {e.action for e in cp.audit.events}
+    assert {"equipment.maintenance", "inventory.reorder"} <= actions

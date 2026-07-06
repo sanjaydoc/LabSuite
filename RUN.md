@@ -98,6 +98,11 @@ labsuite serve                 # http://127.0.0.1:8000
 - `POST /admin/onboard` / `offboard`, `POST /sync`, `GET /access/{user}`, `GET /review`
 - `GET /devices`, `GET /compliance`, `POST /compliance/complete` · `/expire`
 - `GET /ops`, `GET /saas`, `GET /assets`, `GET /inventory`, `GET /vendors`, `GET /safety`
+- `POST /assets/maintenance`, `/inventory/reorder`, `/safety/resolve`, `/vendors/renew`, `/saas/grant`, `/saas/revoke`
+
+The web GUI is **fully operable** — onboard/offboard, complete/lapse training,
+grant/revoke SaaS seats, mark maintenance done, reorder stock, renew vendors, and
+resolve safety issues are all buttons; every mutation is audited.
 
 Example:
 

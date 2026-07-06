@@ -106,6 +106,37 @@ class DemoEngine {
     };
   }
 
+  // ---- ops mutations (fully-operable GUI) ---------------------------
+  completeMaintenance(tag) {
+    const e = this.equipment.find((x) => x.asset_tag === tag);
+    if (e) { e.maintenance_in_days = 90; this.log("operations", "equipment.maintenance", tag, "success", "serviced"); }
+    return e;
+  }
+  reorder(sku) {
+    const i = this.inventory.find((x) => x.sku === sku);
+    if (i) { i.qty += i.reorder_point * 2; i.low = i.qty <= i.reorder_point; this.log("operations", "inventory.reorder", sku, "success", `qty -> ${i.qty}`); }
+    return i;
+  }
+  resolveSafety(area, check) {
+    const s = this.safety.find((x) => x.area === area && x.check === check);
+    if (s) { s.status = "pass"; s.note = ""; this.log("operations", "safety.resolve", `${area}:${check}`, "success"); }
+    return s;
+  }
+  renewVendor(name) {
+    const v = this.vendors.find((x) => x.name === name);
+    if (v) { v.renewal_in_days = 365; this.log("operations", "vendor.renew", name, "success"); }
+    return v;
+  }
+  grantSaasSeat(username, app) {
+    (this.saas[app] ||= { name: app, cost: (this.d.saas_catalog || {})[app] || 0, assignees: new Set() }).assignees.add(username);
+    this.log("saas", "saas.grant", username, "success", app);
+  }
+  revokeSaasSeat(username, app) {
+    const ok = this.saas[app] && this.saas[app].assignees.delete(username);
+    if (ok) this.log("saas", "saas.revoke", username, "success", app);
+    return !!ok;
+  }
+
   assignDevice(username, role) {
     const imageName = this.d.role_image[role] || "mac-standard";
     const img = this.d.image_catalog[imageName];
@@ -333,6 +364,12 @@ const demoBackend = {
   async inventory() { return engine.inventory; },
   async vendors() { return engine.vendors; },
   async safety() { return engine.safety; },
+  async completeMaintenance(tag) { engine.completeMaintenance(tag); },
+  async reorder(sku) { engine.reorder(sku); },
+  async resolveSafety(area, check) { engine.resolveSafety(area, check); },
+  async renewVendor(name) { engine.renewVendor(name); },
+  async grantSaasSeat(u, app) { engine.grantSaasSeat(u, app); },
+  async revokeSaasSeat(u, app) { engine.revokeSaasSeat(u, app); },
   async usernames() { return Object.keys(engine.users).sort(); },
 };
 
@@ -382,6 +419,13 @@ const liveBackend = {
   async inventory() { try { return (await this._json("/inventory")).inventory; } catch { return []; } },
   async vendors() { try { return (await this._json("/vendors")).vendors; } catch { return []; } },
   async safety() { try { return (await this._json("/safety")).safety; } catch { return []; } },
+  async _post(url, body) { return this._json(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); },
+  async completeMaintenance(tag) { await this._post("/assets/maintenance", { asset_tag: tag }); },
+  async reorder(sku) { await this._post("/inventory/reorder", { sku }); },
+  async resolveSafety(area, check) { await this._post("/safety/resolve", { area, check }); },
+  async renewVendor(name) { await this._post("/vendors/renew", { name }); },
+  async grantSaasSeat(u, app) { await this._post("/saas/grant", { username: u, app_name: app }); },
+  async revokeSaasSeat(u, app) { await this._post("/saas/revoke", { username: u, app_name: app }); },
   async usernames() {
     try { return (await this._json("/scim/v2/Users")).Resources.map((u) => u.userName).sort(); }
     catch { return Object.keys(engine.users).sort(); }
@@ -655,33 +699,70 @@ async function renderSaas() {
     [String(data.apps.length), "Apps"],
     [String(data.apps.reduce((t, a) => t + a.assignees.length, 0)), "Seats"],
   ].map(([n, l]) => `<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
-  const rows = data.apps.slice().sort((a, b) => a.name.localeCompare(b.name)).map((a) => {
+  const apps = data.apps.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const rows = apps.map((a) => {
     const monthly = a.monthly_cost_per_seat * a.assignees.length;
+    const chips = a.assignees.map((u) =>
+      `<span class="tag">${esc(u)} <button class="seat-x" data-app="${esc(a.name)}" data-user="${esc(u)}" title="revoke seat" style="border:0;background:none;cursor:pointer;color:var(--no);font-weight:700">×</button></span>`).join(" ");
     return `<tr><td><b>${esc(a.name)}</b></td><td>${a.assignees.length}</td>
       <td>$${a.monthly_cost_per_seat.toFixed(1)}</td><td>$${monthly.toFixed(0)}/mo</td>
-      <td class="muted">${a.assignees.map(esc).join(", ")}</td></tr>`;
+      <td><div class="tags">${chips || '<span class="muted">—</span>'}</div></td></tr>`;
   }).join("");
-  byId("saas-table").innerHTML = `<tr><th>App</th><th>Seats</th><th>$/seat</th><th>Cost</th><th>Assignees</th></tr>${rows}`;
+  const userOpts = (await backend.usernames()).map((u) => `<option>${esc(u)}</option>`).join("");
+  const appOpts = apps.map((a) => `<option>${esc(a.name)}</option>`).join("");
+  byId("saas-table").innerHTML = `<tr><th>App</th><th>Seats</th><th>$/seat</th><th>Cost</th><th>Assignees</th></tr>${rows}
+    <tr><td colspan="5" style="padding-top:12px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span class="label" style="margin:0">Add a seat:</span>
+        <select id="saas-user" style="width:auto">${userOpts}</select>
+        <select id="saas-app" style="width:auto">${appOpts}</select>
+        <button class="btn btn-sm" id="saas-grant">grant seat</button>
+      </div></td></tr>`;
+  $$("#saas-table .seat-x").forEach((b) => b.onclick = async () => {
+    await backend.revokeSaasSeat(b.dataset.user, b.dataset.app); renderSaas();
+  });
+  byId("saas-grant").onclick = async () => {
+    await backend.grantSaasSeat(byId("saas-user").value, byId("saas-app").value); renderSaas();
+  };
 }
+
+const _actBtn = (act, attrs, label) =>
+  `<button class="btn btn-sm act" data-act="${act}" ${attrs} style="padding:.15rem .55rem;font-size:.72rem">${label}</button>`;
 
 async function renderOps() {
   const [equipment, inventory, vendors, safety] = await Promise.all(
     [backend.assets(), backend.inventory(), backend.vendors(), backend.safety()]);
   const maint = (d) => d < 0 ? `<span class="chip deny">overdue ${-d}d</span>`
     : d <= 14 ? `<span class="chip">due ${d}d</span>` : `${d}d`;
-  const eq = equipment.map((e) => `<tr><td>${esc(e.asset_tag)}</td><td>${esc(e.name)}</td><td>${esc(e.location)}</td><td>${maint(e.maintenance_in_days)}</td></tr>`).join("");
-  const inv = inventory.map((i) => `<tr><td>${esc(i.name)}</td><td>${esc(i.location)}</td><td>${i.qty} ${esc(i.unit)}</td><td>${i.low ? '<span class="chip deny">low</span>' : '<span class="chip allow">ok</span>'}</td></tr>`).join("");
-  const ven = vendors.slice().sort((a, b) => a.renewal_in_days - b.renewal_in_days).map((v) => `<tr><td><b>${esc(v.name)}</b></td><td>${esc(v.category)}</td><td>${v.renewal_in_days <= 60 ? `<span class="chip">renews ${v.renewal_in_days}d</span>` : v.renewal_in_days + "d"}</td><td>$${v.annual_cost.toLocaleString()}/yr</td></tr>`).join("");
-  const saf = safety.map((s) => `<tr><td>${s.status === "open" ? '<span class="chip deny">OPEN</span>' : '<span class="chip allow">pass</span>'}</td><td>${esc(s.area)}</td><td>${esc(s.check)}<span class="muted">${s.note ? " — " + esc(s.note) : ""}</span></td></tr>`).join("");
+  const eq = equipment.map((e) => `<tr><td>${esc(e.asset_tag)}</td><td>${esc(e.name)}</td><td>${maint(e.maintenance_in_days)}</td>
+    <td>${_actBtn("maint", `data-tag="${esc(e.asset_tag)}"`, "mark serviced")}</td></tr>`).join("");
+  const inv = inventory.map((i) => `<tr><td>${esc(i.name)}</td><td>${i.qty} ${esc(i.unit)}</td>
+    <td>${i.low ? '<span class="chip deny">low</span>' : '<span class="chip allow">ok</span>'}</td>
+    <td>${i.low ? _actBtn("reorder", `data-sku="${esc(i.sku)}"`, "reorder") : ""}</td></tr>`).join("");
+  const ven = vendors.slice().sort((a, b) => a.renewal_in_days - b.renewal_in_days).map((v) => `<tr><td><b>${esc(v.name)}</b></td>
+    <td>${v.renewal_in_days <= 60 ? `<span class="chip">renews ${v.renewal_in_days}d</span>` : v.renewal_in_days + "d"}</td>
+    <td>$${v.annual_cost.toLocaleString()}/yr</td>
+    <td>${v.renewal_in_days <= 60 ? _actBtn("renew", `data-name="${esc(v.name)}"`, "renew") : ""}</td></tr>`).join("");
+  const saf = safety.map((s) => `<tr><td>${s.status === "open" ? '<span class="chip deny">OPEN</span>' : '<span class="chip allow">pass</span>'}</td>
+    <td>${esc(s.area)}</td><td>${esc(s.check)}<span class="muted">${s.note ? " — " + esc(s.note) : ""}</span></td>
+    <td>${s.status === "open" ? _actBtn("resolve", `data-area="${esc(s.area)}" data-check="${esc(s.check)}"`, "resolve") : ""}</td></tr>`).join("");
   byId("ops-body").innerHTML = `
     <div class="grid2">
-      <div class="card"><div class="label" style="margin-bottom:6px">Equipment &amp; maintenance</div><table><tr><th>Asset</th><th>Name</th><th>Location</th><th>Maint</th></tr>${eq}</table></div>
-      <div class="card"><div class="label" style="margin-bottom:6px">Inventory</div><table><tr><th>Item</th><th>Location</th><th>Qty</th><th></th></tr>${inv}</table></div>
+      <div class="card"><div class="label" style="margin-bottom:6px">Equipment &amp; maintenance</div><table><tr><th>Asset</th><th>Name</th><th>Maint</th><th></th></tr>${eq}</table></div>
+      <div class="card"><div class="label" style="margin-bottom:6px">Inventory</div><table><tr><th>Item</th><th>Qty</th><th>Stock</th><th></th></tr>${inv}</table></div>
     </div>
     <div class="grid2" style="margin-top:16px">
-      <div class="card"><div class="label" style="margin-bottom:6px">Vendors &amp; renewals</div><table><tr><th>Vendor</th><th>Category</th><th>Renewal</th><th>Annual</th></tr>${ven}</table></div>
-      <div class="card"><div class="label" style="margin-bottom:6px">Facility safety</div><table><tr><th></th><th>Area</th><th>Check</th></tr>${saf}</table></div>
+      <div class="card"><div class="label" style="margin-bottom:6px">Vendors &amp; renewals</div><table><tr><th>Vendor</th><th>Renewal</th><th>Annual</th><th></th></tr>${ven}</table></div>
+      <div class="card"><div class="label" style="margin-bottom:6px">Facility safety</div><table><tr><th></th><th>Area</th><th>Check</th><th></th></tr>${saf}</table></div>
     </div>`;
+  $$("#ops-body button.act").forEach((b) => b.onclick = async () => {
+    const a = b.dataset.act;
+    if (a === "maint") await backend.completeMaintenance(b.dataset.tag);
+    else if (a === "reorder") await backend.reorder(b.dataset.sku);
+    else if (a === "renew") await backend.renewVendor(b.dataset.name);
+    else if (a === "resolve") await backend.resolveSafety(b.dataset.area, b.dataset.check);
+    renderOps();
+  });
 }
 
 function renderArchitecture() {

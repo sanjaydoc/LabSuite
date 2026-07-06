@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from labsuite.engine import ControlPlane
 from labsuite.models import AccessLevel, Department, ProxmoxRole
+from labsuite.operations import Equipment, InventoryItem, SafetyCheck, Vendor
 from labsuite.policy import required_trainings
 
 DEMO_PASSWORD = "Winter-Harbor-2026"  # noqa: S105 (demo-only shared password)
@@ -116,12 +117,50 @@ def _wire_ad_nesting(cp: ControlPlane) -> None:
     ad.nest_group("Lab-DAQ-Operators", "Lab")
 
 
+def _wire_operations(cp: ControlPlane) -> None:
+    ops = cp.ops
+    # Equipment (maintenance_in_days: negative = overdue, small = due soon).
+    ops.equipment = [
+        Equipment("EQ-001", "Leica Cryostat CM1950", "Histology", "Lab", 5),
+        Equipment("EQ-002", "Illumina NextSeq 2000", "Sequencing", "Bio", 40),
+        Equipment("EQ-003", "Zeiss LSM 980 Confocal", "Microscopy", "Bio", -3),  # overdue
+        Equipment("EQ-004", "Thermo -80C Freezer A", "Cold Storage", "Lab-Ops", 12),
+        Equipment("EQ-005", "Hamilton STAR Liquid Handler", "Automation", "Platform", 60),
+        Equipment("EQ-006", "Sartorius Analytical Balance", "Lab", "Lab-Ops", -10),  # overdue cal
+        Equipment("EQ-007", "Stereotaxic Surgery Rig", "In-Vivo Suite", "In-Vivo", 20),
+    ]
+    ops.inventory = [
+        InventoryItem("RG-DMEM", "DMEM media", "Cold Room 2", 8, 10, "bottles"),  # low
+        InventoryItem("RG-FBS", "Fetal Bovine Serum", "-20C Freezer", 25, 10, "bottles"),
+        InventoryItem("RG-AAV9", "AAV9 packaging kit", "Vector Core", 2, 3, "kits"),  # low
+        InventoryItem("RG-PBS", "PBS 1x", "Bench 4", 40, 12, "bottles"),
+        InventoryItem("RG-ISO", "Isoflurane", "In-Vivo Suite", 4, 6, "bottles"),  # low
+        InventoryItem("RG-TIP", "Filter tips 200uL", "Consumables", 60, 20, "boxes"),
+    ]
+    ops.vendors = [
+        Vendor("Okta", "Identity", 210, 42000),
+        Vendor("Benchling", "ELN / LIMS", 35, 66000),  # upcoming renewal
+        Vendor("Illumina", "Sequencing reagents", 120, 180000),
+        Vendor("Charles River", "Animal supply", 200, 240000),
+        Vendor("Kandji", "MDM", 15, 9000),  # upcoming renewal
+        Vendor("Slack", "Comms", 320, 15000),
+    ]
+    ops.safety = [
+        SafetyCheck("BSL-2 Lab", "Biosafety cabinet certification current", "pass"),
+        SafetyCheck("Chem Store", "Flammables cabinet grounded", "pass"),
+        SafetyCheck("In-Vivo Suite", "Sharps container <75% full", "open", "overfull at rig 2"),
+        SafetyCheck("Cold Room 2", "Emergency egress clear", "open", "boxes blocking exit"),
+        SafetyCheck("Loading Dock", "Eyewash station flushed weekly", "pass"),
+    ]
+
+
 def build_lab() -> ControlPlane:
     """Build and return a fully-populated control plane for the demo lab."""
     cp = ControlPlane()
     _wire_truenas(cp)
     _wire_proxmox(cp)
     _wire_ad_nesting(cp)
+    _wire_operations(cp)
 
     for display_name, department, role, title in SEED_PEOPLE:
         result = cp.onboard(display_name, department, role, title=title)

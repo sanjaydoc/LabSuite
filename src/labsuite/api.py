@@ -152,6 +152,37 @@ def create_app(cp: ControlPlane | None = None) -> FastAPI:
         return {"username": username, "training": training, "status": "expired"}
 
     # --------------------------------------------------------------- #
+    # Operations (SaaS / equipment / inventory / vendors / safety)
+    # --------------------------------------------------------------- #
+    @app.get("/ops")
+    def ops() -> dict:
+        return control.ops_summary()
+
+    @app.get("/saas")
+    def saas() -> dict:
+        return {
+            "monthly_spend": control.ops.monthly_spend(),
+            "annual_cost": control.ops.annual_saas_cost(),
+            "apps": [a.to_dict() for a in control.ops.saas.values()],
+        }
+
+    @app.get("/assets")
+    def assets() -> dict:
+        return {"equipment": [e.to_dict() for e in control.ops.equipment]}
+
+    @app.get("/inventory")
+    def inventory() -> dict:
+        return {"inventory": [i.to_dict() for i in control.ops.inventory]}
+
+    @app.get("/vendors")
+    def vendors() -> dict:
+        return {"vendors": [v.to_dict() for v in control.ops.vendors]}
+
+    @app.get("/safety")
+    def safety() -> dict:
+        return {"safety": [s.to_dict() for s in control.ops.safety]}
+
+    # --------------------------------------------------------------- #
     # Web GUI + marketing site
     # --------------------------------------------------------------- #
     if _DOCS_DIR.is_dir():

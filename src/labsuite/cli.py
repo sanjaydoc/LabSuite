@@ -111,6 +111,9 @@ def cmd_onboard(args: argparse.Namespace) -> int:
         print(f"  required : {', '.join(result.trainings)} {DIM}(pending){RESET}")
         for share, missing in sorted(result.gated.items()):
             print(f"  {_c('gated', RED)} {share:18} until {', '.join(missing)} complete")
+    if result.saas:
+        _header("SaaS provisioned")
+        print(f"  {', '.join(result.saas)}")
     _save(cp, args.state)
     return 0
 
@@ -132,6 +135,8 @@ def cmd_offboard(args: argparse.Namespace) -> int:
     if result.device:
         d = result.device
         print(f"  device              : {d['asset_tag']} ({d['model']}) -> {_c('wipe & return', RED)}")
+    if result.saas_revoked:
+        print(f"  SaaS seats reclaimed: {', '.join(result.saas_revoked)}")
     _save(cp, args.state)
     return 0 if result.clean else 1
 
@@ -243,6 +248,86 @@ def cmd_devices(args: argparse.Namespace) -> int:
         print(f"  {d.asset_tag}  {d.model:18} {d.image:12} {d.assignee or '-':10} {flag}")
     if not devices:
         print(f"  {DIM}(no devices){RESET}")
+    return 0
+
+
+def cmd_ops(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    s = cp.ops_summary()
+    _header("Operations dashboard")
+    spend = f"${s['monthly_saas_spend']:,.0f}/mo"
+    print(f"  SaaS spend       : {_c(spend, CYAN)} across {s['saas_apps']} apps")
+    print(f"  Equipment        : {s['equipment']} assets")
+
+    def _flags(title, items, colour=RED):
+        mark = _c("!", colour)
+        if items:
+            print(f"  {title}:")
+            for item in items:
+                print(f"    {mark} {item}")
+
+    _flags("Orphaned SaaS seats (inactive users)", s["orphaned_seats"])
+    _flags("Overdue maintenance", s["overdue_equipment"])
+    _flags("Maintenance due soon", s["due_equipment"], CYAN)
+    _flags("Low stock", s["low_stock"])
+    _flags("Upcoming renewals (<=60d)", s["upcoming_renewals"], CYAN)
+    _flags("Open safety issues", s["open_safety"])
+    clean = not any(s[k] for k in ("orphaned_seats", "overdue_equipment", "low_stock", "open_safety"))
+    if clean:
+        print(_c("  all clear", GREEN))
+    return 0
+
+
+def cmd_saas(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    _header("SaaS licences")
+    for app in sorted(cp.ops.saas.values(), key=lambda a: a.name):
+        seats = len(app.assignees)
+        monthly = app.monthly_cost_per_seat * seats
+        print(f"  {app.name:18} {seats:2} seats  ${app.monthly_cost_per_seat:>5.1f}/seat  = ${monthly:>7.0f}/mo")
+    print(_c(f"  total: ${cp.ops.monthly_spend():,.0f}/mo  (${cp.ops.annual_saas_cost():,.0f}/yr)", CYAN))
+    return 0
+
+
+def cmd_assets(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    _header("Equipment / assets")
+    for e in cp.ops.equipment:
+        if e.maintenance_in_days < 0:
+            m = _c(f"overdue {-e.maintenance_in_days}d", RED)
+        elif e.maintenance_in_days <= 14:
+            m = _c(f"due {e.maintenance_in_days}d", CYAN)
+        else:
+            m = f"{e.maintenance_in_days}d"
+        print(f"  {e.asset_tag}  {e.name:30} {e.location:14} maint {m}")
+    return 0
+
+
+def cmd_inventory(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    _header("Inventory")
+    for i in cp.ops.inventory:
+        flag = _c("LOW", RED) if i.low else "ok"
+        print(f"  {i.sku:8} {i.name:22} {i.qty:3} {i.unit:8} (reorder {i.reorder_point})  {flag}")
+    return 0
+
+
+def cmd_vendors(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    _header("Vendors / contracts")
+    for v in sorted(cp.ops.vendors, key=lambda x: x.renewal_in_days):
+        soon = _c("renews soon", CYAN) if v.renewal_in_days <= 60 else ""
+        print(f"  {v.name:16} {v.category:22} renews {v.renewal_in_days:3}d  ${v.annual_cost:>8,.0f}/yr  {soon}")
+    return 0
+
+
+def cmd_safety(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    _header("Facility safety checks")
+    for s in cp.ops.safety:
+        mark = _c("OPEN", RED) if s.status == "open" else _c("pass", GREEN)
+        note = f"{DIM} — {s.note}{RESET}" if s.note else ""
+        print(f"  {mark:5} {s.area:16} {s.check}{note}")
     return 0
 
 
@@ -397,6 +482,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--expire", action="store_true", help="mark the training lapsed instead of complete")
     p.set_defaults(func=cmd_train)
 
+    sub.add_parser("ops", help="operations dashboard (SaaS spend + flags)").set_defaults(func=cmd_ops)
+    sub.add_parser("saas", help="SaaS licences + cost").set_defaults(func=cmd_saas)
+    sub.add_parser("assets", help="equipment + maintenance").set_defaults(func=cmd_assets)
+    sub.add_parser("inventory", help="reagent / consumable inventory").set_defaults(func=cmd_inventory)
+    sub.add_parser("vendors", help="vendor contracts + renewals").set_defaults(func=cmd_vendors)
+    sub.add_parser("safety", help="facility safety checks").set_defaults(func=cmd_safety)
     sub.add_parser("sync", help="run the SCIM reconcile now").set_defaults(func=cmd_sync)
 
     p = sub.add_parser("audit", help="print the audit trail")

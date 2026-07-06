@@ -35,6 +35,7 @@ from labsuite.compliance import ComplianceRegistry
 from labsuite.endpoints import DeviceFleet
 from labsuite.models import AccessDecision, AccessLevel, Department, ProxmoxRole
 from labsuite.okta import OktaDirectory
+from labsuite.operations import Operations
 from labsuite.policy import image_for, onboarding_groups, required_trainings
 from labsuite.proxmox import Proxmox
 from labsuite.scim import ScimSync, SyncReport
@@ -60,6 +61,7 @@ class OnboardResult:
     device: dict | None = None
     trainings: dict[str, str] = field(default_factory=dict)
     gated: dict[str, list[str]] = field(default_factory=dict)
+    saas: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -73,6 +75,7 @@ class OnboardResult:
             "device": self.device,
             "trainings": self.trainings,
             "gated": self.gated,
+            "saas": self.saas,
         }
 
 
@@ -84,6 +87,7 @@ class OffboardResult:
     residual_truenas: dict[str, str] = field(default_factory=dict)
     residual_proxmox: dict[int, str] = field(default_factory=dict)
     device: dict | None = None
+    saas_revoked: list[str] = field(default_factory=list)
 
     @property
     def clean(self) -> bool:
@@ -98,6 +102,7 @@ class OffboardResult:
             "residual_proxmox": self.residual_proxmox,
             "clean": self.clean,
             "device": self.device,
+            "saas_revoked": self.saas_revoked,
         }
 
 
@@ -136,6 +141,7 @@ class ControlPlane:
         proxmox: ComputeProvider | None = None,
         endpoints: EndpointProvider | None = None,
         compliance: ComplianceRegistry | None = None,
+        operations: Operations | None = None,
         audit: AuditLog | None = None,
     ) -> None:
         # Any of these may be a real-system adapter; the control plane only ever
@@ -146,6 +152,7 @@ class ControlPlane:
         self.proxmox: ComputeProvider = proxmox or Proxmox()
         self.endpoints: EndpointProvider = endpoints or DeviceFleet()
         self.compliance = compliance or ComplianceRegistry()
+        self.ops = operations or Operations()
         self.audit = audit or AuditLog()
         self.scim = ScimSync(self.okta, self.ad, self.audit)
 
@@ -214,6 +221,10 @@ class ControlPlane:
             detail=f"pending: {', '.join(trainings)}",
         )
 
+        # SaaS half: grant the baseline + role app seats.
+        saas = self.ops.provision_role_apps(username, role)
+        self.audit.record(actor, "saas.provision", username, "saas", detail=", ".join(saas))
+
         access = self.resolve_access(username)
         return OnboardResult(
             username=username,
@@ -226,6 +237,7 @@ class ControlPlane:
             device=device.to_dict(),
             trainings=access.trainings,
             gated=access.blocked,
+            saas=saas,
         )
 
     # ------------------------------------------------------------------ #
@@ -248,6 +260,11 @@ class ControlPlane:
             self.audit.record(
                 actor, "device.wipe", device.asset_tag, "endpoint", detail="wipe & return",
             )
+
+        # SaaS half: reclaim all licence seats (same-day).
+        saas_revoked = self.ops.revoke_saas_all(username)
+        if saas_revoked:
+            self.audit.record(actor, "saas.revoke", username, "saas", detail=", ".join(saas_revoked))
 
         # Verification: after deprovisioning, effective access must be empty.
         groups = self.ad.effective_groups(username)
@@ -272,6 +289,7 @@ class ControlPlane:
             residual_truenas=residual_nas,
             residual_proxmox={int(p.split("/")[-1]): r for p, r in residual_pve.items()},
             device=device.to_dict() if device is not None else None,
+            saas_revoked=saas_revoked,
         )
 
     # ------------------------------------------------------------------ #
@@ -427,6 +445,17 @@ class ControlPlane:
         return self.scim.reconcile(actor=actor)
 
     # ------------------------------------------------------------------ #
+    # Operations (SaaS / equipment / inventory / vendors / safety)
+    # ------------------------------------------------------------------ #
+    def _is_active(self, username: str) -> bool:
+        user = self.okta.get_user(username)
+        return bool(user and user.active)
+
+    def ops_summary(self) -> dict:
+        """SaaS spend + flags across equipment, inventory, vendors, and safety."""
+        return self.ops.summary(self._is_active)
+
+    # ------------------------------------------------------------------ #
     # Serialisation (persist state between CLI invocations)
     # ------------------------------------------------------------------ #
     def to_dict(self) -> dict:
@@ -437,6 +466,7 @@ class ControlPlane:
             "proxmox": self.proxmox.to_dict(),
             "endpoints": self.endpoints.to_dict(),
             "compliance": self.compliance.to_dict(),
+            "operations": self.ops.to_dict(),
             "audit": self.audit.to_list(),
         }
 
@@ -451,6 +481,7 @@ class ControlPlane:
             proxmox=Proxmox.from_dict(data["proxmox"]),
             endpoints=DeviceFleet.from_dict(data.get("endpoints", {})),
             compliance=ComplianceRegistry.from_dict(data.get("compliance", {})),
+            operations=Operations.from_dict(data.get("operations", {})),
             audit=audit,
         )
         return cp

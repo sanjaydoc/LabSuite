@@ -69,6 +69,28 @@ class DemoEngine {
     // break-glass (just-in-time) elevation ledger
     const j = data.jit || {};
     this.jit = { grants: (j.grants || []).map((g) => ({ ...g })), counter: j.counter || 0 };
+    // backup / DR health ledger
+    this.backups = ((data.backups || {}).records || []).map((r) => ({ ...r }));
+  }
+
+  // ---- backup / DR health ------------------------------------------
+  _backupThreshold(sched) { return ({ hourly: 6, daily: 36, weekly: 192 })[sched] ?? 36; }
+  _backupStale(r) { return r.last_backup_hours > this._backupThreshold(r.schedule); }
+  backupHealth() {
+    const recs = this.backups.slice()
+      .sort((a, b) => (a.kind + a.resource).localeCompare(b.kind + b.resource))
+      .map((r) => ({ ...r, status: this._backupStale(r) ? "stale" : "ok" }));
+    const stale = recs.filter((r) => r.status === "stale");
+    return {
+      records: recs, total: recs.length, stale: stale.length,
+      protected_pct: recs.length ? Math.round((100 * (recs.length - stale.length)) / recs.length) : 100,
+      flags: stale.map((r) => `${r.resource} (${r.kind}): backup ${r.last_backup_hours}h old — ${r.schedule} schedule`),
+    };
+  }
+  runBackup(resource) {
+    const r = this.backups.find((x) => x.resource === resource);
+    if (r) { r.last_backup_hours = 0; this.log("control-plane", "backup.run", resource, "success", r.target); }
+    return r;
   }
 
   // ---- break-glass (just-in-time) admin ----------------------------
@@ -280,6 +302,7 @@ class DemoEngine {
     }
     if (costs.orphaned_monthly) add("medium", "cost", `$${Math.round(costs.orphaned_monthly)}/mo in orphaned SaaS seats reclaimable`, "cost");
     for (const flag of this.netFlags()) add(flag.includes("MISPLACED") ? "high" : "medium", "network", flag, "network");
+    for (const r of this.backupHealth().records) if (r.status === "stale") add("high", "backup", `Stale backup: ${r.resource} (${r.last_backup_hours}h old)`, "backup");
     const pending = this.requests.filter((r) => r.status === "pending");
     if (pending.length) add("info", "requests", `${pending.length} access request(s) awaiting approval`, "requests");
     if (this.campaign.open && this.campaign.subjects.length) {
@@ -673,6 +696,8 @@ const demoBackend = {
   async readiness() { return engine.readinessSummary(); },
   async readinessUser(u) { return engine.onboardingChecklist(u); },
   async cost() { return engine.costAnalytics(); },
+  async backup() { return engine.backupHealth(); },
+  async backupRun(resource) { engine.runBackup(resource); },
   async usernames() { return Object.keys(engine.users).sort(); },
 };
 
@@ -749,6 +774,8 @@ const liveBackend = {
   async readiness() { try { return await this._json("/readiness"); } catch { return { rows: [], ready_count: 0, total: 0 }; } },
   async readinessUser(u) { return this._json(`/readiness/${u}`); },
   async cost() { try { return await this._json("/cost"); } catch { return { by_department: [], vendor_by_category: [] }; } },
+  async backup() { try { return await this._json("/backup"); } catch { return { records: [], total: 0, stale: 0, protected_pct: 100 }; } },
+  async backupRun(resource) { await this._post("/backup/run", { resource }); },
   async usernames() {
     try { return (await this._json("/scim/v2/Users")).Resources.map((u) => u.userName).sort(); }
     catch { return Object.keys(engine.users).sort(); }
@@ -1316,6 +1343,29 @@ async function renderNetwork() {
   };
 }
 
+async function renderBackup() {
+  const h = await backend.backup();
+  byId("bk-stats").innerHTML = [
+    [h.protected_pct + "%", "Protected"],
+    [String(h.total), "Resources"],
+    [String(h.stale), "Stale"],
+  ].map(([n, l]) => `<div class="stat"><div class="n">${esc(n)}</div><div class="l">${esc(l)}</div></div>`).join("");
+  const rows = (h.records || []).map((r) => {
+    const stale = r.status === "stale";
+    return `<tr>
+      <td>${esc(r.resource)}</td><td><span class="tag">${esc(r.kind)}</span></td>
+      <td>${esc(r.schedule)}</td><td>${r.last_backup_hours}h ago</td>
+      <td class="muted">${esc(r.target)}</td>
+      <td>${stale ? '<span class="chip deny">stale</span>' : '<span class="chip allow">ok</span>'}</td>
+      <td>${stale ? _actBtn("backupnow", `data-res="${esc(r.resource)}"`, "back up now") : ""}</td></tr>`;
+  }).join("");
+  byId("bk-body").innerHTML = `<div class="card">
+    <div class="label" style="margin-bottom:6px">Datasets &amp; VMs</div>
+    <table><tr><th>Resource</th><th>Type</th><th>Schedule</th><th>Last backup</th><th>Target</th><th>Status</th><th></th></tr>${rows}</table>
+    <p class="muted" style="font-size:.8rem;margin:.7rem 0 0">A backup is “stale” once it is older than its schedule allows (hourly&gt;6h, daily&gt;36h, weekly&gt;192h).</p></div>`;
+  $$("#bk-body button.act").forEach((b) => b.onclick = async () => { await backend.backupRun(b.dataset.res); renderBackup(); });
+}
+
 // Recompute a matrix cell from the summary's policy (works for demo + live).
 function engineReach(summary, src, dst) {
   if (src === dst) return true;
@@ -1443,7 +1493,7 @@ const RENDERERS = {
   review: renderReview, audit: renderAudit, architecture: renderArchitecture,
   devices: renderDevices, compliance: renderCompliance, saas: renderSaas, ops: renderOps,
   requests: renderRequests, network: renderNetwork, jit: renderJit, readiness: renderReadiness,
-  cost: renderCost,
+  cost: renderCost, backup: renderBackup,
 };
 
 function go(view) {

@@ -66,6 +66,25 @@ labsuite net                              # segments, devices, segmentation flag
 labsuite net --check IoT Corp             # test east-west reachability (default-deny)
 labsuite net --move cam-server-room IoT   # re-place a device onto another VLAN
 
+# Access-review campaigns (attestation)
+labsuite campaign --start                 # open a campaign over all active users
+labsuite campaign --certify anguyen       # attest a user's access
+labsuite campaign --revoke rpatel         # revoke a user's entitlements
+labsuite campaign                         # progress + per-user status
+
+# Break-glass (just-in-time) admin
+labsuite jit --grant lpark Domain-Admins --minutes 60 --reason "incident #42"
+labsuite jit                              # active elevations (with time remaining)
+labsuite jit --sweep                      # auto-expire lapsed grants
+
+# Onboarding readiness / cost / backup
+labsuite readiness                        # day-one-ready status per hire
+labsuite readiness --user nrahman         # one hire's full checklist
+labsuite cost                             # SaaS by dept vs budget + vendor spend
+labsuite backup                           # backup/DR health (stale-backup flags)
+labsuite backup --run tank/invivo         # run a backup now
+labsuite export access --out access.csv   # CSV reports: access | saas | audit
+
 # Governance + operations
 labsuite login   --user anguyen           # demo password is used by default
 labsuite sync                             # run the SCIM reconcile
@@ -116,6 +135,12 @@ labsuite serve                 # http://127.0.0.1:8000
 - `POST /mfa/enroll` — enroll a user in MFA (Okta Verify)
 - `GET /alerts` — the action center (every outstanding flag, with counts)
 - `GET /network`, `POST /network/check` · `/network/move` — VLAN segmentation
+- `GET /campaign`, `POST /campaign/start` · `/certify` · `/revoke` — attestation
+- `GET /jit`, `POST /jit/grant` · `/jit/revoke` · `/jit/sweep` — break-glass admin
+- `GET /readiness` · `/readiness/{user}` — onboarding readiness checklist
+- `GET /cost` — cost analytics by department vs budget
+- `GET /backup`, `POST /backup/run` — backup / DR health
+- `GET /export/{access|saas|audit}` — CSV report download
 - `GET /ops`, `GET /saas`, `GET /assets`, `GET /inventory`, `GET /vendors`, `GET /safety`
 - `POST /assets/maintenance`, `/inventory/reorder`, `/safety/resolve`, `/vendors/renew`, `/saas/grant`, `/saas/revoke`
 - `GET /requests`, `POST /requests` · `/requests/approve` · `/requests/deny`

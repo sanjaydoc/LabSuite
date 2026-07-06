@@ -444,6 +444,24 @@ def cmd_jit(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_backup(args: argparse.Namespace) -> int:
+    cp = _load_or_build(args.state)
+    if args.run:
+        rec = cp.run_backup(args.run)
+        if rec is None:
+            raise SystemExit(f"unknown resource {args.run!r}")
+        print(f"{args.run}: backed up ({_c('now current', GREEN)})")
+        _save(cp, args.state)
+        return 0
+    h = cp.backup_health()
+    _header(f"Backup / DR health — {h['protected_pct']}% protected ({h['stale']} stale)")
+    for r in h["records"]:
+        flag = _c("STALE", RED) if r["status"] == "stale" else _c("ok", GREEN)
+        print(f"  {r['resource']:16} {r['kind']:8} {r['schedule']:7} "
+              f"last {r['last_backup_hours']:>4}h  {r['target']:12} {flag}")
+    return 0
+
+
 def cmd_net(args: argparse.Namespace) -> int:
     cp = _load_or_build(args.state)
     # A single reachability check?
@@ -798,6 +816,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("inventory", help="reagent / consumable inventory").set_defaults(func=cmd_inventory)
     sub.add_parser("vendors", help="vendor contracts + renewals").set_defaults(func=cmd_vendors)
     sub.add_parser("safety", help="facility safety checks").set_defaults(func=cmd_safety)
+
+    p = sub.add_parser("backup", help="backup / DR health across datasets + VMs")
+    p.add_argument("--run", metavar="RESOURCE", help="run a backup now (e.g. tank/invivo or vm/301)")
+    p.set_defaults(func=cmd_backup)
     sub.add_parser("sync", help="run the SCIM reconcile now").set_defaults(func=cmd_sync)
 
     p = sub.add_parser("audit", help="print the audit trail")

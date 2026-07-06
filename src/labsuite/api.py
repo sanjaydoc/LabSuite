@@ -265,6 +265,20 @@ def create_app(cp: ControlPlane | None = None) -> FastAPI:
         return {"expired": control.sweep_jit()}
 
     # --------------------------------------------------------------- #
+    # Backup / DR health
+    # --------------------------------------------------------------- #
+    @app.get("/backup")
+    def backup() -> dict:
+        return control.backup_health()
+
+    @app.post("/backup/run")
+    def backup_run(resource: str = Body(..., embed=True)) -> dict:
+        rec = control.run_backup(resource)
+        if rec is None:
+            raise HTTPException(status_code=404, detail=f"unknown resource {resource!r}")
+        return rec.to_dict()
+
+    # --------------------------------------------------------------- #
     # Networking (VLAN segmentation + IoT)
     # --------------------------------------------------------------- #
     @app.get("/network")

@@ -97,6 +97,7 @@ def main() -> None:
         "mfa_enrolled": sorted(u.username for u in cp.okta.list_users() if cp.okta.is_mfa_enrolled(u.username)),
         "operations": cp.ops.to_dict(),
         "network": cp.network.to_dict(),
+        "backups": cp.backups.to_dict(),
         "elevated_groups": dict(ELEVATED_GROUPS),
         "saas_budget": dict(DEPARTMENT_SAAS_BUDGET),
         "all_groups": sorted({g.name for g in cp.ad.groups.values()} | set(cp.okta.groups)),

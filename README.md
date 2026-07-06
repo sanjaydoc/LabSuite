@@ -132,7 +132,13 @@ Delivery, Platform, Data-Science + Lab-Ops, Compliance, Facilities, Legal, IT):
 | **Endpoints / devices** | Images + ships a managed laptop per role (encryption, MDM, MFA, Iru/Ansible); wipe & return at offboard | IT |
 | **Compliance-gated access** | Training records (IACUC, biosafety…) that gate sensitive lab data; access auto-revokes when training lapses | Compliance, In-Vivo, IT |
 | **Network segmentation** | VLANs (Corp/Lab/IoT/Guest/Mgmt) with a default-deny east-west policy; device placement + IoT-segmentation flags; "can X reach Y?" checks | IT, Security |
-| **Action center** | One inbox aggregating every outstanding flag — lapsed training, MFA gaps, overdue maintenance, low stock, renewals, orphaned seats, segmentation misconfigs, pending requests | IT, everyone |
+| **Access-review campaigns** | Turns the review into an attestation: reviewers certify or revoke each user, with tracked completion — the artifact SOC 2 / ISO 27001 asks for | IT, managers, Compliance |
+| **Break-glass (JIT) admin** | Time-bound elevation into powerful groups that auto-expires — nobody carries standing admin | IT, Security |
+| **Onboarding readiness** | Per-hire day-one-ready checklist across accounts, groups, laptop, MFA, SaaS, and training | IT, managers |
+| **Cost analytics & budgets** | SaaS spend by department vs budget, vendor spend by category, and orphaned-seat savings | IT, Finance |
+| **Backup / DR health** | Snapshot + replication status per TrueNAS dataset and Proxmox VM, with stale-backup flags | IT |
+| **Reporting / CSV export** | One-click CSV of the access review, SaaS spend, and audit trail | IT, Finance, auditors |
+| **Action center** | One inbox aggregating every outstanding flag — lapsed training, MFA gaps, overdue maintenance, low stock, renewals, orphaned seats, segmentation misconfigs, stale backups, over-budget departments, pending reviews & requests | IT, everyone |
 | **SaaS & cost** | Who has a seat in what and **what it costs**; orphaned-seat detection; provisioned on onboard, reclaimed on offboard | IT, Finance |
 | **Equipment & maintenance** | Instrument registry with calibration/maintenance cadence; overdue + due-soon flags | Lab-Ops, Facilities |
 | **Inventory** | Reagents/consumables with reorder points; low-stock flags | Lab-Ops, Vector Core |
@@ -410,6 +416,10 @@ labsuite/
 │   ├── operations.py        # SaaS+cost · equipment · inventory · vendors · safety
 │   ├── requests.py          # self-service access requests + approval queue
 │   ├── network.py           # VLAN segments · device placement · east-west policy
+│   ├── campaigns.py         # access-review attestation campaigns
+│   ├── jit.py               # break-glass (just-in-time) admin elevation
+│   ├── backup.py            # backup / DR health per dataset + VM
+│   ├── reports.py           # CSV reports (access review · SaaS spend · audit)
 │   ├── engine.py            # the ControlPlane — onboard/offboard/resolve/check/review/ops/alerts
 │   ├── policy.py            # role blueprints, image catalog, training + gating rules
 │   ├── audit.py             # append-only audit log

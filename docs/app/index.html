@@ -52,6 +52,7 @@
       <button class="navitem" data-view="cost">Cost analytics</button>
       <button class="navitem" data-view="ops">Lab ops</button>
       <button class="navitem" data-view="network">Network</button>
+      <button class="navitem" data-view="backup">Backup / DR</button>
       <div class="grp">Learn</div>
       <button class="navitem" data-view="architecture">Architecture</button>
       <button class="navitem" data-view="login">Sign-in demo</button>
@@ -223,6 +224,14 @@
         <h2>Lab operations</h2>
         <div class="sub">Equipment, inventory, vendors, and facility safety — with the flags a reviewer wants.</div>
         <div id="ops-body"></div>
+      </section>
+
+      <!-- Backup / DR -->
+      <section class="view" id="view-backup">
+        <h2>Backup / DR health</h2>
+        <div class="sub">Snapshot + replication status for every TrueNAS dataset and Proxmox VM, with stale-backup flags.</div>
+        <div class="stats" id="bk-stats" style="margin-bottom:16px"></div>
+        <div id="bk-body"></div>
       </section>
 
       <!-- Network -->

@@ -191,6 +191,23 @@ def _wire_network(cp: ControlPlane) -> None:
     net.add_device("cam-server-room", "02:00:00:00:00:25", "camera", "Corp", ip="10.10.9.99")
 
 
+def _wire_backups(cp: ControlPlane) -> None:
+    bk = cp.backups
+    # TrueNAS datasets: hourly/daily snapshots replicated off-box. A couple are
+    # deliberately stale to demonstrate the DR flag.
+    bk.add("tank/research", "dataset", "hourly", 2, retention_days=30, target="replication")
+    bk.add("tank/invivo", "dataset", "hourly", 9, retention_days=90, target="replication")  # STALE (>6h)
+    bk.add("tank/eln", "dataset", "daily", 20, retention_days=30, target="pbs")
+    bk.add("tank/models", "dataset", "daily", 30, retention_days=30, target="cloud")
+    bk.add("tank/legal", "dataset", "daily", 50, retention_days=365, target="cloud")  # STALE (>36h)
+    bk.add("tank/lab", "dataset", "daily", 12, retention_days=30, target="replication")
+    # Proxmox VMs: nightly PBS backups.
+    bk.add("vm/101", "vm", "daily", 10, retention_days=14, target="pbs")
+    bk.add("vm/201", "vm", "daily", 22, retention_days=14, target="pbs")
+    bk.add("vm/900", "vm", "hourly", 3, retention_days=7, target="pbs")  # the domain controller
+    bk.add("vm/301", "vm", "weekly", 210, retention_days=30, target="pbs")  # STALE (>192h)
+
+
 def build_lab() -> ControlPlane:
     """Build and return a fully-populated control plane for the demo lab."""
     cp = ControlPlane()
@@ -199,6 +216,7 @@ def build_lab() -> ControlPlane:
     _wire_ad_nesting(cp)
     _wire_operations(cp)
     _wire_network(cp)
+    _wire_backups(cp)
 
     for display_name, department, role, title in SEED_PEOPLE:
         result = cp.onboard(display_name, department, role, title=title)

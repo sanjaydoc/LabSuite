@@ -54,5 +54,6 @@ def test_pending_request_shows_as_info():
 
 def test_alert_views_are_valid_targets():
     cp = build_lab()
-    valid = {"review", "compliance", "explorer", "ops", "saas", "network", "requests"}
+    valid = {"review", "compliance", "explorer", "ops", "saas", "network", "requests",
+             "jit", "cost", "backup"}
     assert all(a["view"] in valid for a in cp.action_center()["alerts"])

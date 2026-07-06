@@ -31,6 +31,7 @@ from labsuite.adapters.base import (
     StorageProvider,
 )
 from labsuite.audit import AuditLog
+from labsuite.backup import BackupRegistry
 from labsuite.campaigns import ReviewCampaign
 from labsuite.compliance import ComplianceRegistry
 from labsuite.endpoints import DeviceFleet
@@ -164,6 +165,7 @@ class ControlPlane:
         self.requests = RequestQueue()
         self.campaign = ReviewCampaign("")  # empty until a review campaign is started
         self.jit = JitLedger()  # break-glass elevation ledger
+        self.backups = BackupRegistry()  # backup / DR health ledger
         self.audit = audit or AuditLog()
         self.scim = ScimSync(self.okta, self.ad, self.audit)
 
@@ -694,6 +696,10 @@ class ControlPlane:
             sev = "high" if "MISPLACED" in flag else "medium"
             add(sev, "network", flag, "network")
 
+        # Backup / DR: any resource whose last backup is stale.
+        for rec in self.backups.stale():
+            add("high", "backup", f"Stale backup: {rec.resource} ({rec.last_backup_hours}h old)", "backup")
+
         # Governance: access requests awaiting a decision.
         pending = self.requests.pending()
         if pending:
@@ -848,6 +854,19 @@ class ControlPlane:
         return ok
 
     # ------------------------------------------------------------------ #
+    # Backup / DR health
+    # ------------------------------------------------------------------ #
+    def backup_health(self) -> dict:
+        return self.backups.health()
+
+    def run_backup(self, resource: str, *, actor: str = "it-admin"):
+        """Run a backup now for a dataset/VM, resetting its staleness."""
+        rec = self.backups.run_backup(resource)
+        if rec is not None:
+            self.audit.record(actor, "backup.run", resource, "control-plane", detail=rec.target)
+        return rec
+
+    # ------------------------------------------------------------------ #
     # Networking (VLAN segmentation + IoT)
     # ------------------------------------------------------------------ #
     def network_summary(self) -> dict:
@@ -885,6 +904,7 @@ class ControlPlane:
             "requests": self.requests.to_dict(),
             "campaign": self.campaign.to_dict(),
             "jit": self.jit.to_dict(),
+            "backups": self.backups.to_dict(),
             "audit": self.audit.to_list(),
         }
 
@@ -906,4 +926,5 @@ class ControlPlane:
         cp.requests = RequestQueue.from_dict(data.get("requests", {}))
         cp.campaign = ReviewCampaign.from_dict(data.get("campaign", {}))
         cp.jit = JitLedger.from_dict(data.get("jit", {}))
+        cp.backups = BackupRegistry.from_dict(data.get("backups", {}))
         return cp

@@ -794,6 +794,100 @@ window.LABSUITE_DATA = {
       ]
     ]
   },
+  "backups": {
+    "records": [
+      {
+        "resource": "tank/research",
+        "kind": "dataset",
+        "schedule": "hourly",
+        "last_backup_hours": 2,
+        "retention_days": 30,
+        "target": "replication",
+        "status": "ok"
+      },
+      {
+        "resource": "tank/invivo",
+        "kind": "dataset",
+        "schedule": "hourly",
+        "last_backup_hours": 9,
+        "retention_days": 90,
+        "target": "replication",
+        "status": "stale"
+      },
+      {
+        "resource": "tank/eln",
+        "kind": "dataset",
+        "schedule": "daily",
+        "last_backup_hours": 20,
+        "retention_days": 30,
+        "target": "pbs",
+        "status": "ok"
+      },
+      {
+        "resource": "tank/models",
+        "kind": "dataset",
+        "schedule": "daily",
+        "last_backup_hours": 30,
+        "retention_days": 30,
+        "target": "cloud",
+        "status": "ok"
+      },
+      {
+        "resource": "tank/legal",
+        "kind": "dataset",
+        "schedule": "daily",
+        "last_backup_hours": 50,
+        "retention_days": 365,
+        "target": "cloud",
+        "status": "stale"
+      },
+      {
+        "resource": "tank/lab",
+        "kind": "dataset",
+        "schedule": "daily",
+        "last_backup_hours": 12,
+        "retention_days": 30,
+        "target": "replication",
+        "status": "ok"
+      },
+      {
+        "resource": "vm/101",
+        "kind": "vm",
+        "schedule": "daily",
+        "last_backup_hours": 10,
+        "retention_days": 14,
+        "target": "pbs",
+        "status": "ok"
+      },
+      {
+        "resource": "vm/201",
+        "kind": "vm",
+        "schedule": "daily",
+        "last_backup_hours": 22,
+        "retention_days": 14,
+        "target": "pbs",
+        "status": "ok"
+      },
+      {
+        "resource": "vm/900",
+        "kind": "vm",
+        "schedule": "hourly",
+        "last_backup_hours": 3,
+        "retention_days": 7,
+        "target": "pbs",
+        "status": "ok"
+      },
+      {
+        "resource": "vm/301",
+        "kind": "vm",
+        "schedule": "weekly",
+        "last_backup_hours": 210,
+        "retention_days": 30,
+        "target": "pbs",
+        "status": "stale"
+      }
+    ]
+  },
   "elevated_groups": {
     "Domain-Admins": "Full datacenter + storage admin (TrueNAS FULL, Proxmox PVEAdmin)",
     "CI-Operators": "CI/CD pipeline admin on the Proxmox CI pool",
